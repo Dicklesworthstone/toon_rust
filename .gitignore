@@ -1,7 +1,37 @@
-legacy_toon/
+# Build artifacts (all target directories)
 target/
+target*/
 
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Legacy reference code (not part of Rust project)
+/legacy_toon/
+/legacy_spec/
+
+# Coverage reports
+/coverage/
+
+# Local agent/session artifacts
+SESSION_STATUS.md
+a.out
+
+# Temp directories and crash reports
+temp_test*/
+rustc-ice-*.txt
+
+# Large source images (webp versions are committed)
+*.png
+
+# Claude Code temp files
+claude-upgrade-progress.json
 
 # Added by cargo
-
 /target
