@@ -118,11 +118,7 @@ fn encode_key_value_pair_lines(
                 }
                 JsonValue::Object(entries) => {
                     if is_empty_object(&entries) {
-                        out.push(indented_key_colon_line(
-                            depth,
-                            &encoded_key,
-                            options.indent,
-                        ));
+                        out.push(indented_key_colon_line(depth, &encoded_key, options.indent));
                         return;
                     }
                 }
@@ -439,7 +435,11 @@ fn encode_object_as_list_item_lines(
             }
         }
         JsonValue::Object(entries) => {
-            out.push(indented_list_item_key_colon(depth, &encoded_key, options.indent));
+            out.push(indented_list_item_key_colon(
+                depth,
+                &encoded_key,
+                options.indent,
+            ));
             if !is_empty_object(&entries) {
                 encode_object_lines(&entries, depth + 2, options, None, None, None, out);
             }
@@ -495,12 +495,7 @@ fn indented_line(depth: usize, content: &str, indent_size: usize) -> String {
 }
 
 /// Build "key: value" line directly without intermediate format! allocation
-fn indented_key_value_line(
-    depth: usize,
-    key: &str,
-    value: &str,
-    indent_size: usize,
-) -> String {
+fn indented_key_value_line(depth: usize, key: &str, value: &str, indent_size: usize) -> String {
     let indent_chars = indent_size * depth;
     // key + ": " + value
     let mut out = String::with_capacity(indent_chars + key.len() + 2 + value.len());
@@ -575,7 +570,12 @@ fn indented_list_item_key_colon(depth: usize, key: &str, indent_size: usize) -> 
 }
 
 /// Build "- key[N]:" list item directly without intermediate format! allocation
-fn indented_list_item_key_header(depth: usize, key: &str, header: &str, indent_size: usize) -> String {
+fn indented_list_item_key_header(
+    depth: usize,
+    key: &str,
+    header: &str,
+    indent_size: usize,
+) -> String {
     let indent_chars = indent_size * depth;
     let prefix_len = LIST_ITEM_PREFIX.len();
     // "- " + key + header
@@ -600,7 +600,11 @@ fn estimate_line_count(value: &JsonValue) -> usize {
         }
         JsonValue::Object(entries) => {
             // Each entry produces at least one line
-            entries.iter().map(|(_, v)| estimate_line_count(v)).sum::<usize>().max(1)
+            entries
+                .iter()
+                .map(|(_, v)| estimate_line_count(v))
+                .sum::<usize>()
+                .max(1)
         }
     }
 }

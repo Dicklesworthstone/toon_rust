@@ -23,7 +23,10 @@ fn estimate_json_size(value: &JsonValue, indent: usize) -> usize {
             crate::StringOrNumberOrBoolOrNull::String(s) => s.len() + 10,
         },
         JsonValue::Array(items) => {
-            let base = items.iter().map(|v| estimate_json_size(v, indent)).sum::<usize>();
+            let base = items
+                .iter()
+                .map(|v| estimate_json_size(v, indent))
+                .sum::<usize>();
             base + items.len() * (2 + indent) + 4
         }
         JsonValue::Object(entries) => {

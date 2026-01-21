@@ -136,13 +136,16 @@ fn read_file(path: &Path) -> Result<String> {
 
 fn write_output(args: &Args, data: &[u8]) -> Result<()> {
     if let Some(ref path) = args.output {
-        let mut file = File::create(path)
-            .map_err(|e| ToonError::message(format!("Failed to create file '{}': {e}", path.display())))?;
-        file.write_all(data)
-            .map_err(|e| ToonError::message(format!("Failed to write to file '{}': {e}", path.display())))?;
+        let mut file = File::create(path).map_err(|e| {
+            ToonError::message(format!("Failed to create file '{}': {e}", path.display()))
+        })?;
+        file.write_all(data).map_err(|e| {
+            ToonError::message(format!("Failed to write to file '{}': {e}", path.display()))
+        })?;
         // Add trailing newline for file output
-        file.write_all(b"\n")
-            .map_err(|e| ToonError::message(format!("Failed to write to file '{}': {e}", path.display())))?;
+        file.write_all(b"\n").map_err(|e| {
+            ToonError::message(format!("Failed to write to file '{}': {e}", path.display()))
+        })?;
     } else {
         let stdout = io::stdout();
         let mut handle = stdout.lock();
@@ -158,8 +161,9 @@ fn write_output(args: &Args, data: &[u8]) -> Result<()> {
 
 fn write_lines(args: &Args, lines: &[String]) -> Result<()> {
     if let Some(ref path) = args.output {
-        let file = File::create(path)
-            .map_err(|e| ToonError::message(format!("Failed to create file '{}': {e}", path.display())))?;
+        let file = File::create(path).map_err(|e| {
+            ToonError::message(format!("Failed to create file '{}': {e}", path.display()))
+        })?;
         let mut writer = BufWriter::new(file);
 
         for (i, line) in lines.iter().enumerate() {
@@ -200,8 +204,9 @@ fn write_lines(args: &Args, lines: &[String]) -> Result<()> {
 
 fn write_chunks(args: &Args, chunks: &[String]) -> Result<()> {
     if let Some(ref path) = args.output {
-        let file = File::create(path)
-            .map_err(|e| ToonError::message(format!("Failed to create file '{}': {e}", path.display())))?;
+        let file = File::create(path).map_err(|e| {
+            ToonError::message(format!("Failed to create file '{}': {e}", path.display()))
+        })?;
         let mut writer = BufWriter::new(file);
 
         for chunk in chunks {

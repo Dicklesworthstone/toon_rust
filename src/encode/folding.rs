@@ -48,7 +48,8 @@ pub fn try_fold_key_chain(
         return None;
     }
 
-    let mut folded_key = String::with_capacity(segments.iter().map(String::len).sum::<usize>() + segments.len());
+    let mut folded_key =
+        String::with_capacity(segments.iter().map(String::len).sum::<usize>() + segments.len());
     for (i, seg) in segments.iter().enumerate() {
         if i > 0 {
             folded_key.push(DOT);

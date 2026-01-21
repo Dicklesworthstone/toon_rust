@@ -1,0 +1,14 @@
+users[2]{id,name,email,age,active}:
+  1,Alice,alice@example.com,30,true
+  2,Bob,bob@example.com,25,false
+metadata:
+  version: 1.0.0
+  generated: "2024-01-15T10:30:00Z"
+  tags[2]: test,benchmark
+config:
+  maxUsers: 1000
+  timeout: 30
+  features:
+    auth: true
+    logging: true
+    cache: false
