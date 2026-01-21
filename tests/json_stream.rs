@@ -275,7 +275,7 @@ fn encode_stream_events_roundtrip_with_decode() {
     // Encode to TOON, then decode back to events
     let toon = encode(value.clone(), None);
     let decode_events = decode_stream_sync(
-        toon.lines().map(|s| s.to_string()).collect::<Vec<_>>(),
+        toon.lines().map(str::to_string),
         None,
     );
 
