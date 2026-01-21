@@ -14,17 +14,16 @@ pub fn is_numeric_like(value: &str) -> bool {
 
     let bytes = trimmed.as_bytes();
     let mut i = 0usize;
-    let digit_start: usize;
 
-    if bytes[0] == b'-' {
+    let digit_start = if bytes[0] == b'-' {
         i += 1;
         if i >= bytes.len() {
             return false;
         }
-        digit_start = 1;
+        1
     } else {
-        digit_start = 0;
-    }
+        0
+    };
 
     let mut digit_count = 0usize;
     while i < bytes.len() && bytes[i].is_ascii_digit() {

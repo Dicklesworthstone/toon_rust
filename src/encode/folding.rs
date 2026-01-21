@@ -108,7 +108,7 @@ fn collect_single_key_chain(
             (segments, None, obj)
         }
         JsonValue::Object(entries) => {
-            let remainder = JsonValue::Object(entries.clone());
+            let remainder = JsonValue::Object(entries);
             (segments, Some(remainder.clone()), remainder)
         }
         other => (segments, None, other),
