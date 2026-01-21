@@ -152,7 +152,11 @@ jobs:
         with:
           toolchain: nightly
       - name: Publish to crates.io
-        if: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
-        run: cargo publish --all-features
+        run: |
+          if [ -n "$CARGO_REGISTRY_TOKEN" ]; then
+            cargo publish --all-features
+          else
+            echo "CARGO_REGISTRY_TOKEN not set, skipping crates.io publish"
+          fi
