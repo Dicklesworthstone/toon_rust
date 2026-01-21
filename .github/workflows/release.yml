@@ -140,7 +140,7 @@ jobs:
         with:
           toolchain: nightly
       - name: Publish to crates.io
-        if: ${{ env.CARGO_REGISTRY_TOKEN != '' }}
+        if: ${{ secrets.CARGO_REGISTRY_TOKEN != '' }}
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --all-features
