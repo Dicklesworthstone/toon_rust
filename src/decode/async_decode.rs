@@ -149,21 +149,19 @@ impl<I: Iterator<Item = String> + Unpin> Stream for AsyncDecodeStream<I> {
     type Item = Result<JsonStreamEvent>;
 
     fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match self.process_next_line() {
-            Ok(Some(event)) => Poll::Ready(Some(Ok(event))),
-            Ok(None) => {
-                if self.finished && self.pending_idx >= self.pending_events.len() {
-                    Poll::Ready(None)
-                } else {
-                    // Try again to get pending events
-                    match self.process_next_line() {
-                        Ok(Some(event)) => Poll::Ready(Some(Ok(event))),
-                        Ok(None) => Poll::Ready(None),
-                        Err(e) => Poll::Ready(Some(Err(e))),
+        // Loop until we either get an event or are truly finished
+        loop {
+            match self.process_next_line() {
+                Ok(Some(event)) => return Poll::Ready(Some(Ok(event))),
+                Ok(None) => {
+                    // Check if we're truly done
+                    if self.finished && self.pending_idx >= self.pending_events.len() {
+                        return Poll::Ready(None);
                     }
+                    // Not done yet, continue processing lines
                 }
+                Err(e) => return Poll::Ready(Some(Err(e))),
             }
-            Err(e) => Poll::Ready(Some(Err(e))),
         }
     }
 }

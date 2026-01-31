@@ -7,6 +7,9 @@ pub mod error;
 pub mod options;
 pub mod shared;
 
+#[cfg(feature = "wasm")]
+pub mod wasm;
+
 pub use decode::{
     decode, decode_from_lines, decode_stream, decode_stream_sync, try_decode,
     try_decode_from_lines, try_decode_stream, try_decode_stream_sync,
