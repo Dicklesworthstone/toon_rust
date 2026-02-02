@@ -485,8 +485,10 @@ fn object_get<'a>(entries: &'a JsonObject, key: &str) -> Option<&'a JsonValue> {
 }
 
 fn indented_line(depth: usize, content: &str, indent_size: usize) -> String {
-    let indent_chars = indent_size * depth;
-    let mut out = String::with_capacity(indent_chars + content.len());
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
+    let capacity = indent_chars.saturating_add(content.len());
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -496,9 +498,14 @@ fn indented_line(depth: usize, content: &str, indent_size: usize) -> String {
 
 /// Build "key: value" line directly without intermediate format! allocation
 fn indented_key_value_line(depth: usize, key: &str, value: &str, indent_size: usize) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     // key + ": " + value
-    let mut out = String::with_capacity(indent_chars + key.len() + 2 + value.len());
+    let capacity = indent_chars
+        .saturating_add(key.len())
+        .saturating_add(2)
+        .saturating_add(value.len());
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -510,9 +517,11 @@ fn indented_key_value_line(depth: usize, key: &str, value: &str, indent_size: us
 
 /// Build "key:" line directly without intermediate format! allocation
 fn indented_key_colon_line(depth: usize, key: &str, indent_size: usize) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     // key + ":"
-    let mut out = String::with_capacity(indent_chars + key.len() + 1);
+    let capacity = indent_chars.saturating_add(key.len()).saturating_add(1);
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -522,9 +531,11 @@ fn indented_key_colon_line(depth: usize, key: &str, indent_size: usize) -> Strin
 }
 
 fn indented_list_item(depth: usize, content: &str, indent_size: usize) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     let prefix_len = LIST_ITEM_PREFIX.len();
-    let mut out = String::with_capacity(indent_chars + prefix_len + content.len());
+    let capacity = indent_chars.saturating_add(prefix_len).saturating_add(content.len());
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -540,10 +551,16 @@ fn indented_list_item_key_value(
     value: &str,
     indent_size: usize,
 ) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     let prefix_len = LIST_ITEM_PREFIX.len();
     // "- " + key + ": " + value
-    let mut out = String::with_capacity(indent_chars + prefix_len + key.len() + 2 + value.len());
+    let capacity = indent_chars
+        .saturating_add(prefix_len)
+        .saturating_add(key.len())
+        .saturating_add(2)
+        .saturating_add(value.len());
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -556,10 +573,15 @@ fn indented_list_item_key_value(
 
 /// Build "- key:" list item directly without intermediate format! allocation
 fn indented_list_item_key_colon(depth: usize, key: &str, indent_size: usize) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     let prefix_len = LIST_ITEM_PREFIX.len();
     // "- " + key + ":"
-    let mut out = String::with_capacity(indent_chars + prefix_len + key.len() + 1);
+    let capacity = indent_chars
+        .saturating_add(prefix_len)
+        .saturating_add(key.len())
+        .saturating_add(1);
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
@@ -576,10 +598,15 @@ fn indented_list_item_key_header(
     header: &str,
     indent_size: usize,
 ) -> String {
-    let indent_chars = indent_size * depth;
+    // Use saturating arithmetic to prevent overflow with deeply nested structures
+    let indent_chars = indent_size.saturating_mul(depth);
     let prefix_len = LIST_ITEM_PREFIX.len();
     // "- " + key + header
-    let mut out = String::with_capacity(indent_chars + prefix_len + key.len() + header.len());
+    let capacity = indent_chars
+        .saturating_add(prefix_len)
+        .saturating_add(key.len())
+        .saturating_add(header.len());
+    let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');
     }
