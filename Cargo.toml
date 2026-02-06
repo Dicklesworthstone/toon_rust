@@ -24,7 +24,7 @@ exclude = [
 ]
 
 [[bin]]
-name = "tru"
+name = "toon"
 path = "src/main.rs"
 
 [dependencies]

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 REPO="Dicklesworthstone/toon_rust"
-BIN_NAME="tru"
+BIN_NAME="toon"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 
-log() { echo "[tru] $*" >&2; }
-fail() { echo "[tru] $*" >&2; exit 1; }
+log() { echo "[toon] $*" >&2; }
+fail() { echo "[toon] $*" >&2; exit 1; }
 
 download() {
   local url="$1"
@@ -49,7 +49,7 @@ fi
 url="https://github.com/${REPO}/releases/latest/download/${asset}"
 
 mkdir -p "$INSTALL_DIR"
-tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t tru)"
+tmpdir="$(mktemp -d 2>/dev/null || mktemp -d -t toon)"
 
 cleanup() {
   rm -rf "$tmpdir"
