@@ -8,9 +8,9 @@ use predicates::prelude::*;
 use std::fs;
 use tempfile::TempDir;
 
-/// Get a Command for the `toon` binary
+/// Get a Command for the `tru` binary
 fn tru() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_toon"))
+    Command::new(env!("CARGO_BIN_EXE_tru"))
 }
 
 // ============================================================================
