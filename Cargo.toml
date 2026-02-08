@@ -1,6 +1,6 @@
 [package]
-name = "toon_rust"
-version = "0.1.2"
+name = "tru"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.85"
 description = "TOON reference implementation in Rust (JSON <-> TOON)"
@@ -8,7 +8,7 @@ license = "MIT"
 readme = "README.md"
 homepage = "https://github.com/Dicklesworthstone/toon_rust"
 repository = "https://github.com/Dicklesworthstone/toon_rust"
-documentation = "https://docs.rs/toon_rust"
+documentation = "https://docs.rs/tru"
 keywords = ["cli", "json", "serialization", "llm", "encoding"]
 categories = ["command-line-utilities", "encoding"]
 exclude = [
@@ -21,6 +21,7 @@ exclude = [
     "PROPOSED_ARCHITECTURE.md",
     "tests/golden_outputs/",
     "toon_illustration.webp",
+    "storage.sqlite3",
 ]
 
 [[bin]]
@@ -48,7 +49,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "jso
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async streaming (optional)
-asupersync = { path = "../asupersync", optional = true }
+asupersync = { version = "0.1.1", path = "../asupersync", optional = true }
 
 # WebAssembly (optional)
 wasm-bindgen = { version = "0.2", optional = true }

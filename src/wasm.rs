@@ -9,7 +9,7 @@
 //! # Usage (JavaScript)
 //!
 //! ```javascript
-//! import init, { encode, decode, encode_with_options, decode_with_options } from 'toon_rust';
+//! import init, { encode, decode, encode_with_options, decode_with_options } from 'tru';
 //!
 //! await init();
 //!

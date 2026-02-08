@@ -534,7 +534,9 @@ fn indented_list_item(depth: usize, content: &str, indent_size: usize) -> String
     // Use saturating arithmetic to prevent overflow with deeply nested structures
     let indent_chars = indent_size.saturating_mul(depth);
     let prefix_len = LIST_ITEM_PREFIX.len();
-    let capacity = indent_chars.saturating_add(prefix_len).saturating_add(content.len());
+    let capacity = indent_chars
+        .saturating_add(prefix_len)
+        .saturating_add(content.len());
     let mut out = String::with_capacity(capacity);
     for _ in 0..indent_chars {
         out.push(' ');

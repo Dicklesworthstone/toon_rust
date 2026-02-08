@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use toon_rust::JsonValue;
-use toon_rust::decode::decode;
-use toon_rust::options::{DecodeOptions, ExpandPathsMode};
+use tru::JsonValue;
+use tru::decode::decode;
+use tru::options::{DecodeOptions, ExpandPathsMode};
 
 #[derive(Debug, Deserialize)]
 struct FixtureFile {
@@ -95,15 +95,11 @@ fn parse_decode_options(options: Option<&serde_json::Value>) -> Option<DecodeOpt
 fn json_value_to_serde(value: JsonValue) -> serde_json::Value {
     match value {
         JsonValue::Primitive(primitive) => match primitive {
-            toon_rust::StringOrNumberOrBoolOrNull::Null => serde_json::Value::Null,
-            toon_rust::StringOrNumberOrBoolOrNull::Bool(value) => serde_json::Value::Bool(value),
-            toon_rust::StringOrNumberOrBoolOrNull::Number(value) => {
-                serde_json::Number::from_f64(value)
-                    .map_or(serde_json::Value::Null, serde_json::Value::Number)
-            }
-            toon_rust::StringOrNumberOrBoolOrNull::String(value) => {
-                serde_json::Value::String(value)
-            }
+            tru::StringOrNumberOrBoolOrNull::Null => serde_json::Value::Null,
+            tru::StringOrNumberOrBoolOrNull::Bool(value) => serde_json::Value::Bool(value),
+            tru::StringOrNumberOrBoolOrNull::Number(value) => serde_json::Number::from_f64(value)
+                .map_or(serde_json::Value::Null, serde_json::Value::Number),
+            tru::StringOrNumberOrBoolOrNull::String(value) => serde_json::Value::String(value),
         },
         JsonValue::Array(values) => {
             serde_json::Value::Array(values.into_iter().map(json_value_to_serde).collect())

@@ -9,10 +9,10 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use toon_rust::cli::json_stringify::json_stringify_lines;
-use toon_rust::decode::decode;
-use toon_rust::encode::encode;
-use toon_rust::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
+use tru::cli::json_stringify::json_stringify_lines;
+use tru::decode::decode;
+use tru::encode::encode;
+use tru::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
 
 #[derive(Debug, Deserialize)]
 struct FixtureFile {

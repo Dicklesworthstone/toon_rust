@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use toon_rust::encode::async_encode::{encode_async, AsyncEncodeStream};
+//! use tru::encode::async_encode::{encode_async, AsyncEncodeStream};
 //! use asupersync::stream::StreamExt;
 //!
 //! async fn encode_large_value(value: JsonValue) {

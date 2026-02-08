@@ -155,8 +155,8 @@ tru data.json --stats
 ### Library Usage
 
 ```rust
-use toon_rust::{encode, decode};
-use toon_rust::options::{EncodeOptions, KeyFoldingMode};
+use tru::{encode, decode};
+use tru::options::{EncodeOptions, KeyFoldingMode};
 
 fn main() {
     // Simple encode
@@ -318,7 +318,7 @@ Common flags:
 There is no config file. All configuration is via CLI flags or library options:
 
 ```rust
-use toon_rust::options::{EncodeOptions, KeyFoldingMode};
+use tru::options::{EncodeOptions, KeyFoldingMode};
 
 let options = EncodeOptions {
     indent: Some(2),

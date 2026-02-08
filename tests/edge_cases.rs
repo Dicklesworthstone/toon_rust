@@ -11,8 +11,8 @@
 //! - Key folding conflict scenarios
 
 use proptest::prelude::*;
-use toon_rust::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
-use toon_rust::{JsonValue, decode, encode, try_decode};
+use tru::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
+use tru::{JsonValue, decode, encode, try_decode};
 
 // ============================================================================
 // UNICODE EDGE CASES
@@ -235,14 +235,14 @@ fn numeric_nan_becomes_null() {
     let value = JsonValue::Object(vec![
         (
             "nan".to_string(),
-            JsonValue::Primitive(toon_rust::StringOrNumberOrBoolOrNull::from_f64(f64::NAN)),
+            JsonValue::Primitive(tru::StringOrNumberOrBoolOrNull::from_f64(f64::NAN)),
         ),
         (
             "valid".to_string(),
-            JsonValue::Primitive(toon_rust::StringOrNumberOrBoolOrNull::Number(42.0)),
+            JsonValue::Primitive(tru::StringOrNumberOrBoolOrNull::Number(42.0)),
         ),
     ]);
-    let toon = toon_rust::encode::encode(value, None);
+    let toon = tru::encode::encode(value, None);
     let decoded = decode(&toon, None);
     // NaN should become null
     let decoded_json: serde_json::Value = decoded.into();
@@ -256,18 +256,14 @@ fn numeric_infinity_becomes_null() {
     let value = JsonValue::Object(vec![
         (
             "pos_inf".to_string(),
-            JsonValue::Primitive(toon_rust::StringOrNumberOrBoolOrNull::from_f64(
-                f64::INFINITY,
-            )),
+            JsonValue::Primitive(tru::StringOrNumberOrBoolOrNull::from_f64(f64::INFINITY)),
         ),
         (
             "neg_inf".to_string(),
-            JsonValue::Primitive(toon_rust::StringOrNumberOrBoolOrNull::from_f64(
-                f64::NEG_INFINITY,
-            )),
+            JsonValue::Primitive(tru::StringOrNumberOrBoolOrNull::from_f64(f64::NEG_INFINITY)),
         ),
     ]);
-    let toon = toon_rust::encode::encode(value, None);
+    let toon = tru::encode::encode(value, None);
     let decoded = decode(&toon, None);
     let decoded_json: serde_json::Value = decoded.into();
     assert!(decoded_json["pos_inf"].is_null());

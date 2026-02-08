@@ -1,6 +1,6 @@
-use toon_rust::cli::json_stream::json_stream_from_events;
-use toon_rust::cli::json_stringify::json_stringify_lines;
-use toon_rust::{
+use tru::cli::json_stream::json_stream_from_events;
+use tru::cli::json_stringify::json_stringify_lines;
+use tru::{
     JsonStreamEvent, JsonValue, StringOrNumberOrBoolOrNull, decode_stream_sync, encode,
     encode_stream_events,
 };

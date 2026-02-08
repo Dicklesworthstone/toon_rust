@@ -11,8 +11,8 @@
 
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
-use toon_rust::options::{EncodeOptions, KeyFoldingMode};
-use toon_rust::{decode, encode};
+use tru::options::{EncodeOptions, KeyFoldingMode};
+use tru::{decode, encode};
 
 // ============================================================================
 // TEST DATA GENERATION
