@@ -2,7 +2,7 @@
 name = "tru"
 version = "0.2.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.88"
 description = "TOON reference implementation in Rust (JSON <-> TOON)"
 license = "MIT"
 readme = "README.md"
