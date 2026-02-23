@@ -36,7 +36,7 @@ jobs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Determine and validate tag
         id: tag
         run: |
@@ -86,7 +86,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@nightly
         with:
           targets: ${{ matrix.target }}
@@ -118,7 +118,7 @@ jobs:
           Compress-Archive -Path target/${{ matrix.target }}/release/toon.exe -DestinationPath dist/${{ matrix.asset_name }}.zip
           $hash = (Get-FileHash dist/${{ matrix.asset_name }}.zip -Algorithm SHA256).Hash.ToLower()
           "$hash  ${{ matrix.asset_name }}.zip" | Out-File -FilePath dist/${{ matrix.asset_name }}.zip.sha256 -Encoding ascii -NoNewline
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist-${{ matrix.target }}
           path: dist/*
@@ -133,7 +133,7 @@ jobs:
     # Skip pre-releases
     if: ${{ !contains(needs.plan.outputs.tag, '-') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@nightly
 
@@ -172,10 +172,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: artifacts
           pattern: dist-*
@@ -222,7 +222,7 @@ jobs:
 
       - name: Trigger formula update
         if: steps.check.outputs.skip != 'true'
-        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
+        uses: peter-evans/repository-dispatch@f49a8ac5751834a0666df77deb0289abbe2b3a78 # v3
         with:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           repository: Dicklesworthstone/homebrew-tap
@@ -253,7 +253,7 @@ jobs:
 
       - name: Trigger manifest update
         if: steps.check.outputs.skip != 'true'
-        uses: peter-evans/repository-dispatch@ff45666b9427631e3450c54a1bcbee4d9ff4d7c0 # v3
+        uses: peter-evans/repository-dispatch@f49a8ac5751834a0666df77deb0289abbe2b3a78 # v3
         with:
           token: ${{ secrets.SCOOP_BUCKET_TOKEN }}
           repository: Dicklesworthstone/scoop-bucket
