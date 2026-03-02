@@ -53,7 +53,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "jso
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async streaming (optional)
-asupersync = { version = "0.2.5", optional = true }
+asupersync = { version = "0.2.6", optional = true }
 
 # WebAssembly (optional)
 wasm-bindgen = { version = "0.2", optional = true }
