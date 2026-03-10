@@ -1,65 +1,64 @@
 # Dependency Upgrade Log
 
-**Date:** 2026-01-21
-**Project:** toon_rust
+**Date:** 2026-02-19  |  **Project:** toon_rust  |  **Language:** Rust
 
 ## Summary
+- **Updated:** 11 (10 crates + 1 toolchain)  |  **Skipped:** 0  |  **Failed:** 0
 
-This document logs the upgrade of all dependencies to their latest stable versions.
+## Toolchain
 
----
+### Rust nightly: 1.95.0-nightly (a423f68a0 2026-02-13) -> 1.95.0-nightly (7f99507f5 2026-02-19)
+- **Breaking:** None
+- **Note:** Required uninstall/reinstall due to corrupted cross-compilation target state
+- **Tests:** Passed
 
-## Dependency Updates
+## Dependencies
 
-### Production Dependencies
+### anyhow: 1.0.100 -> 1.0.102
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
-| Crate | Current Version | Target Version | Status | Notes |
-|-------|-----------------|----------------|--------|-------|
-| clap | 4.5 | 4.5.54 | Pending | Minor version bump, no breaking changes expected |
-| clap_complete | 4.5 | 4.5.65 | Pending | Minor version bump, no breaking changes expected |
-| serde | 1.0 | 1.0.228 | Pending | Patch version bump, backward compatible |
-| serde_json | 1.0 | 1.0.149 | Pending | Patch version bump, backward compatible |
-| anyhow | 1.0 | 1.0.100 | Pending | Patch version bump, backward compatible |
-| thiserror | 2.0 | 2.0.18 | Pending | Already on 2.0, patch bump only |
-| tracing | 0.1 | 0.1.44 | Pending | Patch version bump, backward compatible |
-| tracing-subscriber | 0.3 | 0.3.22 | Pending | Patch version bump, backward compatible |
-| chrono | 0.4 | 0.4.43 | Pending | Patch version bump, backward compatible |
+### asupersync: 0.2.0 -> 0.2.5
+- **Breaking:** None (patch within 0.x)
+- **Tests:** Passed
 
-### Build Dependencies
+### clap: 4.5.54 -> 4.5.60
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
-| Crate | Current Version | Target Version | Status | Notes |
-|-------|-----------------|----------------|--------|-------|
-| vergen-gix | 9.1 | 9.1.0 | Pending | Already at latest stable (10.x is beta only) |
+### clap_complete: 4.5.65 -> 4.5.66
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
-### Dev Dependencies
+### criterion: 0.8.1 -> 0.8.2
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
-| Crate | Current Version | Target Version | Status | Notes |
-|-------|-----------------|----------------|--------|-------|
-| tempfile | 3.10 | 3.24.0 | Pending | Minor version bumps, should be backward compatible |
-| assert_cmd | 2.0 | 2.1.2 | Pending | Minor version bump |
-| predicates | 3.1 | 3.1.3 | Pending | Patch version bump |
-| criterion | 0.8 | 0.8.1 | Pending | Patch version bump |
-| walkdir | 2.4 | 2.5.0 | Pending | Minor version bump |
-| insta | 1.38 | 1.46.1 | Pending | Minor version bump |
-| proptest | 1.6 | 1.9.0 | Pending | Minor version bump |
-| rand | 0.9.2 | 0.9.2 | Pending | Already at latest stable (0.10.x is rc only) |
+### insta: 1.46.1 -> 1.46.3
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
----
+### predicates: 3.1.3 -> 3.1.4
+- **Breaking:** None (patch)
+- **Tests:** Passed
 
-## GitHub Actions Updates
+### proptest: 1.9.0 -> 1.10.0
+- **Breaking:** None observed (minor version bump)
+- **Tests:** Passed
 
-| Action | Current | Target | Status |
-|--------|---------|--------|--------|
-| actions/checkout | v4 (34e11487...) | v6 (8e8c483d...) | Pending |
-| actions/upload-artifact | v4 (ea165f8d...) | v4 (ea165f8d...) | Already at v4 |
-| actions/download-artifact | v4 (d3f86a10...) | v4 (d3f86a10...) | Already at v4 |
-| actions/attest-build-provenance | v1 (e8998f94...) | v3 (43d14bc2...) | Pending |
+### rand: 0.9.2 -> 0.10.0
+- **Breaking:** Major API changes (trait renames, method renames, OsRng -> SysRng)
+- **Impact:** None -- rand is an unused dev-dependency in this project (zero imports found)
+- **Tests:** Passed
 
----
+### tempfile: 3.24.0 -> 3.25.0
+- **Breaking:** None (minor)
+- **Tests:** Passed
 
-## Upgrade Process Log
+## Validation
 
-### Step 1: Update Cargo.toml Dependencies
-
-Starting with all dependency updates in Cargo.toml...
-
+- `cargo check --all-targets`: Passed
+- `cargo test`: 103/103 passed
+- `cargo clippy --all-targets -- -D warnings`: Clean (0 warnings)
+- `cargo fmt --check`: Clean
+- `cargo outdated --root-deps-only`: "All dependencies are up to date"
