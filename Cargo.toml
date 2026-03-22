@@ -1,6 +1,6 @@
 [package]
 name = "tru"
-version = "0.2.1"
+version = "0.2.2"
 edition = "2024"
 rust-version = "1.88"
 description = "TOON reference implementation in Rust (JSON <-> TOON)"
@@ -53,7 +53,7 @@ tracing-subscriber = { version = "0.3.22", features = ["env-filter", "fmt", "jso
 chrono = { version = "0.4", features = ["serde"] }
 
 # Async streaming (optional)
-asupersync = { version = "0.2.5", optional = true }
+asupersync = { version = "0.2.9", optional = true }
 
 # WebAssembly (optional)
 wasm-bindgen = { version = "0.2", optional = true }
