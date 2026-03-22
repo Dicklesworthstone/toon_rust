@@ -47,7 +47,7 @@ pub const fn is_json_object(value: &JsonValue) -> bool {
 }
 
 #[must_use]
-pub fn is_empty_object(value: &JsonObject) -> bool {
+pub const fn is_empty_object(value: &JsonObject) -> bool {
     value.is_empty()
 }
 

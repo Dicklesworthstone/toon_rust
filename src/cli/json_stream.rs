@@ -61,13 +61,12 @@ pub fn json_stream_from_events(
                     return Err(ToonError::message("Mismatched endObject event"));
                 }
                 depth = depth.saturating_sub(1);
-                if indent > 0 {
-                    if let JsonContext::Object { needs_comma, .. } = context {
-                        if needs_comma {
-                            out.push("\n".to_string());
-                            out.push(" ".repeat(depth * indent));
-                        }
-                    }
+                if indent > 0
+                    && let JsonContext::Object { needs_comma, .. } = context
+                    && needs_comma
+                {
+                    out.push("\n".to_string());
+                    out.push(" ".repeat(depth * indent));
                 }
                 out.push("}".to_string());
 
@@ -114,13 +113,12 @@ pub fn json_stream_from_events(
                     return Err(ToonError::message("Mismatched endArray event"));
                 }
                 depth = depth.saturating_sub(1);
-                if indent > 0 {
-                    if let JsonContext::Array { needs_comma } = context {
-                        if needs_comma {
-                            out.push("\n".to_string());
-                            out.push(" ".repeat(depth * indent));
-                        }
-                    }
+                if indent > 0
+                    && let JsonContext::Array { needs_comma } = context
+                    && needs_comma
+                {
+                    out.push("\n".to_string());
+                    out.push(" ".repeat(depth * indent));
                 }
                 out.push("]".to_string());
 

@@ -34,14 +34,14 @@ pub fn validate_no_extra_list_items(
     expected_count: usize,
     strict: bool,
 ) -> Result<()> {
-    if strict {
-        if let Some(line) = next_line {
-            if line.depth == item_depth && line.content.starts_with(LIST_ITEM_PREFIX) {
-                return Err(ToonError::message(format!(
-                    "Expected {expected_count} list array items, but found more"
-                )));
-            }
-        }
+    if strict
+        && let Some(line) = next_line
+        && line.depth == item_depth
+        && line.content.starts_with(LIST_ITEM_PREFIX)
+    {
+        return Err(ToonError::message(format!(
+            "Expected {expected_count} list array items, but found more"
+        )));
     }
     Ok(())
 }
@@ -57,18 +57,16 @@ pub fn validate_no_extra_tabular_rows(
     header: &ArrayHeaderInfo,
     strict: bool,
 ) -> Result<()> {
-    if strict {
-        if let Some(line) = next_line {
-            if line.depth == row_depth
-                && !line.content.starts_with(LIST_ITEM_PREFIX)
-                && is_data_row(&line.content, header.delimiter)
-            {
-                return Err(ToonError::message(format!(
-                    "Expected {} tabular rows, but found more",
-                    header.length
-                )));
-            }
-        }
+    if strict
+        && let Some(line) = next_line
+        && line.depth == row_depth
+        && !line.content.starts_with(LIST_ITEM_PREFIX)
+        && is_data_row(&line.content, header.delimiter)
+    {
+        return Err(ToonError::message(format!(
+            "Expected {} tabular rows, but found more",
+            header.length
+        )));
     }
     Ok(())
 }
@@ -113,10 +111,10 @@ fn is_data_row(content: &str, delimiter: char) -> bool {
     }
 
     // If delimiter comes before colon (outside quotes), it's a data row
-    if let Some(delimiter_pos) = delimiter_pos {
-        if let Some(colon_pos) = colon_pos {
-            return delimiter_pos < colon_pos;
-        }
+    if let Some(delimiter_pos) = delimiter_pos
+        && let Some(colon_pos) = colon_pos
+    {
+        return delimiter_pos < colon_pos;
     }
 
     false

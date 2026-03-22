@@ -66,10 +66,10 @@ pub fn try_fold_key_chain(
         |prefix| format!("{prefix}{DOT}{folded_key}"),
     );
 
-    if let Some(root_keys) = root_literal_keys {
-        if root_keys.contains(&absolute_path) {
-            return None;
-        }
+    if let Some(root_keys) = root_literal_keys
+        && root_keys.contains(&absolute_path)
+    {
+        return None;
     }
 
     Some(FoldResult {

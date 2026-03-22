@@ -373,23 +373,22 @@ fn encode_object_as_list_item_lines(
     };
     let (first_key, first_value) = first;
 
-    if let JsonValue::Array(items) = &first_value {
-        if is_array_of_objects(items) {
-            if let Some(header) = extract_tabular_header(items) {
-                let formatted = format_header(
-                    items.len(),
-                    Some(&first_key),
-                    Some(&header),
-                    options.delimiter,
-                );
-                out.push(indented_list_item(depth, &formatted, options.indent));
-                write_tabular_rows_lines(items, &header, depth + 2, options, out);
-                if !rest.is_empty() {
-                    encode_object_lines(&rest, depth + 1, options, None, None, None, out);
-                }
-                return;
-            }
+    if let JsonValue::Array(items) = &first_value
+        && is_array_of_objects(items)
+        && let Some(header) = extract_tabular_header(items)
+    {
+        let formatted = format_header(
+            items.len(),
+            Some(&first_key),
+            Some(&header),
+            options.delimiter,
+        );
+        out.push(indented_list_item(depth, &formatted, options.indent));
+        write_tabular_rows_lines(items, &header, depth + 2, options, out);
+        if !rest.is_empty() {
+            encode_object_lines(&rest, depth + 1, options, None, None, None, out);
         }
+        return;
     }
 
     let encoded_key = encode_key(&first_key);

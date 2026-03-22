@@ -94,15 +94,15 @@ impl Args {
         }
 
         // Auto-detect based on file extension
-        if let Some(ref path) = self.input {
-            if let Some(ext) = path.extension() {
-                let ext = ext.to_string_lossy().to_lowercase();
-                if ext == "json" {
-                    return Mode::Encode;
-                }
-                if ext == "toon" {
-                    return Mode::Decode;
-                }
+        if let Some(ref path) = self.input
+            && let Some(ext) = path.extension()
+        {
+            let ext = ext.to_string_lossy().to_lowercase();
+            if ext == "json" {
+                return Mode::Encode;
+            }
+            if ext == "toon" {
+                return Mode::Decode;
             }
         }
 

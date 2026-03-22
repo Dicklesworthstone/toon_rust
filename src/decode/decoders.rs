@@ -53,12 +53,12 @@ pub fn decode_stream_sync(
         return Ok(events);
     };
 
-    if is_array_header_content(&first.content) {
-        if let Some(header_info) = parse_array_header_line(&first.content, DEFAULT_DELIMITER)? {
-            cursor.advance_sync();
-            decode_array_from_header_sync(&mut events, header_info, &mut cursor, 0, context)?;
-            return Ok(events);
-        }
+    if is_array_header_content(&first.content)
+        && let Some(header_info) = parse_array_header_line(&first.content, DEFAULT_DELIMITER)?
+    {
+        cursor.advance_sync();
+        decode_array_from_header_sync(&mut events, header_info, &mut cursor, 0, context)?;
+        return Ok(events);
     }
 
     cursor.advance_sync();
@@ -96,15 +96,15 @@ fn decode_key_value_sync(
     base_depth: Depth,
     options: DecoderContext,
 ) -> Result<()> {
-    if let Some(header_info) = parse_array_header_line(content, DEFAULT_DELIMITER)? {
-        if let Some(key) = header_info.header.key.clone() {
-            events.push(JsonStreamEvent::Key {
-                key,
-                was_quoted: header_info.header.key_was_quoted,
-            });
-            decode_array_from_header_sync(events, header_info, cursor, base_depth, options)?;
-            return Ok(());
-        }
+    if let Some(header_info) = parse_array_header_line(content, DEFAULT_DELIMITER)?
+        && let Some(key) = header_info.header.key.clone()
+    {
+        events.push(JsonStreamEvent::Key {
+            key,
+            was_quoted: header_info.header.key_was_quoted,
+        });
+        decode_array_from_header_sync(events, header_info, cursor, base_depth, options)?;
+        return Ok(());
     }
 
     let (key, end, is_quoted) = parse_key_token(content, 0)?;
@@ -117,13 +117,13 @@ fn decode_key_value_sync(
 
     if rest.is_empty() {
         let next_line = cursor.peek_sync();
-        if let Some(next) = next_line {
-            if next.depth > base_depth {
-                events.push(JsonStreamEvent::StartObject);
-                decode_object_fields_sync(events, cursor, base_depth + 1, options)?;
-                events.push(JsonStreamEvent::EndObject);
-                return Ok(());
-            }
+        if let Some(next) = next_line
+            && next.depth > base_depth
+        {
+            events.push(JsonStreamEvent::StartObject);
+            decode_object_fields_sync(events, cursor, base_depth + 1, options)?;
+            events.push(JsonStreamEvent::EndObject);
+            return Ok(());
         }
 
         events.push(JsonStreamEvent::StartObject);
@@ -189,12 +189,12 @@ fn decode_array_from_header_sync(
         return Ok(());
     }
 
-    if let Some(fields) = &header.fields {
-        if !fields.is_empty() {
-            decode_tabular_array_sync(events, &header, cursor, base_depth, options)?;
-            events.push(JsonStreamEvent::EndArray);
-            return Ok(());
-        }
+    if let Some(fields) = &header.fields
+        && !fields.is_empty()
+    {
+        decode_tabular_array_sync(events, &header, cursor, base_depth, options)?;
+        events.push(JsonStreamEvent::EndArray);
+        return Ok(());
     }
 
     decode_list_array_sync(events, &header, cursor, base_depth, options)?;
@@ -281,16 +281,16 @@ fn decode_tabular_array_sync(
 
     assert_expected_count(row_count, header.length, "tabular rows", options.strict)?;
 
-    if options.strict {
-        if let (Some(start), Some(end)) = (start_line, end_line) {
-            validate_no_blank_lines_in_range(
-                start,
-                end,
-                cursor.get_blank_lines(),
-                options.strict,
-                "tabular array",
-            )?;
-        }
+    if options.strict
+        && let (Some(start), Some(end)) = (start_line, end_line)
+    {
+        validate_no_blank_lines_in_range(
+            start,
+            end,
+            cursor.get_blank_lines(),
+            options.strict,
+            "tabular array",
+        )?;
     }
 
     validate_no_extra_tabular_rows(cursor.peek_sync(), row_depth, header, options.strict)?;
@@ -345,16 +345,16 @@ fn decode_list_array_sync(
         options.strict,
     )?;
 
-    if options.strict {
-        if let (Some(start), Some(end)) = (start_line, end_line) {
-            validate_no_blank_lines_in_range(
-                start,
-                end,
-                cursor.get_blank_lines(),
-                options.strict,
-                "list array",
-            )?;
-        }
+    if options.strict
+        && let (Some(start), Some(end)) = (start_line, end_line)
+    {
+        validate_no_blank_lines_in_range(
+            start,
+            end,
+            cursor.get_blank_lines(),
+            options.strict,
+            "list array",
+        )?;
     }
 
     validate_no_extra_list_items(
@@ -396,60 +396,53 @@ fn decode_list_item_sync(
         return Ok(());
     }
 
-    if is_array_header_content(&after_hyphen) {
-        if let Some(header_info) = parse_array_header_line(&after_hyphen, DEFAULT_DELIMITER)? {
-            decode_array_from_header_sync(events, header_info, cursor, base_depth, options)?;
-            return Ok(());
-        }
+    if is_array_header_content(&after_hyphen)
+        && let Some(header_info) = parse_array_header_line(&after_hyphen, DEFAULT_DELIMITER)?
+    {
+        decode_array_from_header_sync(events, header_info, cursor, base_depth, options)?;
+        return Ok(());
     }
 
-    if let Some(header_info) = parse_array_header_line(&after_hyphen, DEFAULT_DELIMITER)? {
-        if header_info.header.key.is_some() && header_info.header.fields.is_some() {
-            let header = header_info.header;
-            events.push(JsonStreamEvent::StartObject);
-            events.push(JsonStreamEvent::Key {
-                key: header.key.clone().unwrap_or_default(),
-                was_quoted: header.key_was_quoted,
-            });
-            decode_array_from_header_sync(
-                events,
-                crate::decode::parser::ArrayHeaderParseResult {
-                    header,
-                    inline_values: header_info.inline_values,
-                },
-                cursor,
-                base_depth + 1,
-                options,
-            )?;
+    if let Some(header_info) = parse_array_header_line(&after_hyphen, DEFAULT_DELIMITER)?
+        && header_info.header.key.is_some()
+        && header_info.header.fields.is_some()
+    {
+        let header = header_info.header;
+        events.push(JsonStreamEvent::StartObject);
+        events.push(JsonStreamEvent::Key {
+            key: header.key.clone().unwrap_or_default(),
+            was_quoted: header.key_was_quoted,
+        });
+        decode_array_from_header_sync(
+            events,
+            crate::decode::parser::ArrayHeaderParseResult {
+                header,
+                inline_values: header_info.inline_values,
+            },
+            cursor,
+            base_depth + 1,
+            options,
+        )?;
 
-            let follow_depth = base_depth + 1;
-            while !cursor.at_end_sync() {
-                let next_line = cursor.peek_sync().cloned();
-                let Some(next_line) = next_line else {
-                    break;
-                };
-                if next_line.depth < follow_depth {
-                    break;
-                }
-                if next_line.depth == follow_depth
-                    && !next_line.content.starts_with(LIST_ITEM_PREFIX)
-                {
-                    cursor.advance_sync();
-                    decode_key_value_sync(
-                        events,
-                        &next_line.content,
-                        cursor,
-                        follow_depth,
-                        options,
-                    )?;
-                } else {
-                    break;
-                }
+        let follow_depth = base_depth + 1;
+        while !cursor.at_end_sync() {
+            let next_line = cursor.peek_sync().cloned();
+            let Some(next_line) = next_line else {
+                break;
+            };
+            if next_line.depth < follow_depth {
+                break;
             }
-
-            events.push(JsonStreamEvent::EndObject);
-            return Ok(());
+            if next_line.depth == follow_depth && !next_line.content.starts_with(LIST_ITEM_PREFIX) {
+                cursor.advance_sync();
+                decode_key_value_sync(events, &next_line.content, cursor, follow_depth, options)?;
+            } else {
+                break;
+            }
         }
+
+        events.push(JsonStreamEvent::EndObject);
+        return Ok(());
     }
 
     if is_key_value_content(&after_hyphen) {

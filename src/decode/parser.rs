@@ -70,13 +70,12 @@ pub fn parse_array_header_line(
         .find(COLON)
         .map(|idx| bracket_end + 1 + idx);
 
-    if let (Some(brace_start), Some(colon_after_bracket)) = (brace_start, colon_after_bracket) {
-        if brace_start < colon_after_bracket {
-            if let Some(found_end) = content[brace_start..].find(CLOSE_BRACE) {
-                let found_end = brace_start + found_end;
-                brace_end = found_end + 1;
-            }
-        }
+    if let (Some(brace_start), Some(colon_after_bracket)) = (brace_start, colon_after_bracket)
+        && brace_start < colon_after_bracket
+        && let Some(found_end) = content[brace_start..].find(CLOSE_BRACE)
+    {
+        let found_end = brace_start + found_end;
+        brace_end = found_end + 1;
     }
 
     let colon_index = content[brace_end..].find(COLON).map(|idx| brace_end + idx);
@@ -104,24 +103,23 @@ pub fn parse_array_header_line(
     };
 
     let mut fields: Option<Vec<FieldName>> = None;
-    if let Some(brace_start) = brace_start {
-        if brace_start < colon_index {
-            if let Some(found_end) = content[brace_start..].find(CLOSE_BRACE) {
-                let found_end = brace_start + found_end;
-                if found_end < colon_index {
-                    let fields_content = &content[brace_start + 1..found_end];
-                    let parsed_fields = parse_delimited_values(fields_content, delimiter)
-                        .into_iter()
-                        .map(|field| {
-                            let trimmed = field.trim();
-                            let was_quoted = trimmed.starts_with(DOUBLE_QUOTE);
-                            let name = parse_string_literal(trimmed)?;
-                            Ok(FieldName { name, was_quoted })
-                        })
-                        .collect::<Result<Vec<_>>>()?;
-                    fields = Some(parsed_fields);
-                }
-            }
+    if let Some(brace_start) = brace_start
+        && brace_start < colon_index
+        && let Some(found_end) = content[brace_start..].find(CLOSE_BRACE)
+    {
+        let found_end = brace_start + found_end;
+        if found_end < colon_index {
+            let fields_content = &content[brace_start + 1..found_end];
+            let parsed_fields = parse_delimited_values(fields_content, delimiter)
+                .into_iter()
+                .map(|field| {
+                    let trimmed = field.trim();
+                    let was_quoted = trimmed.starts_with(DOUBLE_QUOTE);
+                    let name = parse_string_literal(trimmed)?;
+                    Ok(FieldName { name, was_quoted })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            fields = Some(parsed_fields);
         }
     }
 

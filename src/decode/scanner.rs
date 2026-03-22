@@ -91,7 +91,7 @@ pub fn parse_line_incremental(
                     ),
                 ));
             }
-        } else if indent > 0 && indent % indent_size != 0 {
+        } else if indent > 0 && !indent.is_multiple_of(indent_size) {
             return Err(ToonError::invalid_indentation(
                 line_number,
                 indent_size,
@@ -191,7 +191,7 @@ impl StreamingLineCursor {
     }
 
     #[must_use]
-    pub fn at_end_sync(&self) -> bool {
+    pub const fn at_end_sync(&self) -> bool {
         self.index >= self.lines.len()
     }
 }
