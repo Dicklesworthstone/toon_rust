@@ -69,8 +69,8 @@ assert_cmd = "2.2.0"
 predicates = "3.1.4"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 walkdir = "2.5.0"
-insta = { version = "1.46.3", features = ["json", "yaml"] }
-proptest = "1.10.0"
+insta = { version = "1.47.2", features = ["json", "yaml"] }
+proptest = "1.11.0"
 rand = "0.10.0"
 
 [[bench]]
