@@ -119,7 +119,7 @@ jobs:
           Compress-Archive -Path target/${{ matrix.target }}/release/toon.exe -DestinationPath dist/${{ matrix.asset_name }}.zip
           $hash = (Get-FileHash dist/${{ matrix.asset_name }}.zip -Algorithm SHA256).Hash.ToLower()
           "$hash  ${{ matrix.asset_name }}.zip" | Out-File -FilePath dist/${{ matrix.asset_name }}.zip.sha256 -Encoding ascii -NoNewline
-      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: dist-${{ matrix.target }}
           path: dist/*
@@ -190,7 +190,7 @@ jobs:
           cat *.sha256 | sort > checksums.txt
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2.6.1
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ needs.plan.outputs.tag }}
           name: toon_rust ${{ needs.plan.outputs.tag }}
