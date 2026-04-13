@@ -35,7 +35,7 @@ path = "src/main.rs"
 [dependencies]
 # CLI
 clap = { version = "4.6.0", features = ["derive", "env"] }
-clap_complete = "4.6.0"
+clap_complete = "4.6.2"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
@@ -71,7 +71,7 @@ criterion = { version = "0.8.2", features = ["html_reports"] }
 walkdir = "2.5.0"
 insta = { version = "1.47.2", features = ["json", "yaml"] }
 proptest = "1.11.0"
-rand = "0.10.0"
+rand = "0.10.1"
 
 [[bench]]
 name = "toon_benchmark"
