@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::HashSet;
 
 use crate::JsonValue;
@@ -61,13 +62,13 @@ pub fn try_fold_key_chain(
         return None;
     }
 
-    let absolute_path = path_prefix.map_or_else(
-        || folded_key.clone(),
-        |prefix| format!("{prefix}{DOT}{folded_key}"),
+    let absolute_path: Cow<str> = path_prefix.map_or_else(
+        || Cow::Borrowed(folded_key.as_str()),
+        |prefix| Cow::Owned(format!("{prefix}{DOT}{folded_key}")),
     );
 
     if let Some(root_keys) = root_literal_keys
-        && root_keys.contains(&absolute_path)
+        && root_keys.contains(absolute_path.as_ref())
     {
         return None;
     }
