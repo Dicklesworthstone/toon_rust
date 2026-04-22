@@ -176,13 +176,13 @@ impl<I: Iterator<Item = String>> AsyncDecodeStream<I> {
     /// Process the first line to determine document structure
     fn process_initial_line(&mut self, line: ParsedLine) -> Result<Option<JsonStreamEvent>> {
         // Check if it's an array header at root level
-        if is_array_header_content(&line.content) {
-            if let Some(_header_info) = parse_array_header_line(&line.content, DEFAULT_DELIMITER)? {
-                // Array at root - need batch processing
-                self.state = DecoderState::ArrayMode;
-                self.line_buffer.push(line);
-                return Ok(None);
-            }
+        if is_array_header_content(&line.content)
+            && parse_array_header_line(&line.content, DEFAULT_DELIMITER)?.is_some()
+        {
+            // Array at root - need batch processing
+            self.state = DecoderState::ArrayMode;
+            self.line_buffer.push(line);
+            return Ok(None);
         }
 
         // Check if it's a key-value line (object)
@@ -212,17 +212,17 @@ impl<I: Iterator<Item = String>> AsyncDecodeStream<I> {
         let current_depth = line.depth;
 
         // Handle depth changes - emit EndObject for decreased depth
-        if let Some(last_depth) = self.last_depth {
-            if current_depth < last_depth {
-                // Pop contexts until we match the current depth
-                while let Some(&obj_depth) = self.context_stack.last() {
-                    if obj_depth >= current_depth && obj_depth > base_depth {
-                        self.context_stack.pop();
-                        // Emit EndObject for closed nested object
-                        self.event_queue.push_back(JsonStreamEvent::EndObject);
-                    } else {
-                        break;
-                    }
+        if let Some(last_depth) = self.last_depth
+            && current_depth < last_depth
+        {
+            // Pop contexts until we match the current depth
+            while let Some(&obj_depth) = self.context_stack.last() {
+                if obj_depth >= current_depth && obj_depth > base_depth {
+                    self.context_stack.pop();
+                    // Emit EndObject for closed nested object
+                    self.event_queue.push_back(JsonStreamEvent::EndObject);
+                } else {
+                    break;
                 }
             }
         }

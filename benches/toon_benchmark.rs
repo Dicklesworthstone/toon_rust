@@ -9,6 +9,8 @@
 //! - Tabular array detection
 //! - Comparison against `serde_json` baseline
 
+#![allow(clippy::cast_precision_loss)]
+
 use criterion::{BenchmarkId, Criterion, Throughput, criterion_group, criterion_main};
 use std::hint::black_box;
 use toon::options::{EncodeOptions, KeyFoldingMode};
@@ -40,7 +42,6 @@ fn generate_nested_object(depth: usize) -> serde_json::Value {
 }
 
 /// Generate a tabular array (array of objects with same structure)
-#[allow(clippy::cast_precision_loss)]
 fn generate_tabular_array(num_rows: usize) -> serde_json::Value {
     let rows: Vec<serde_json::Value> = (0..num_rows)
         .map(|i| {
@@ -281,7 +282,6 @@ fn bench_key_folding_overhead(c: &mut Criterion) {
 // COMPRESSION RATIO BENCHMARKS
 // ============================================================================
 
-#[allow(clippy::cast_precision_loss)]
 fn bench_compression_ratio(c: &mut Criterion) {
     let mut group = c.benchmark_group("compression_ratio");
 
