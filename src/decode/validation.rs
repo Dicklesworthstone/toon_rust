@@ -119,3 +119,161 @@ fn is_data_row(content: &str, delimiter: char) -> bool {
 
     false
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_line(content: &str, depth: usize, line_number: usize) -> ParsedLine {
+        ParsedLine {
+            raw: content.to_string(),
+            indent: depth * 2,
+            content: content.to_string(),
+            depth,
+            line_number,
+        }
+    }
+
+    #[test]
+    fn assert_expected_count_matches_is_ok() {
+        assert!(assert_expected_count(3, 3, "items", true).is_ok());
+    }
+
+    #[test]
+    fn assert_expected_count_mismatch_strict_errors() {
+        assert!(assert_expected_count(2, 3, "items", true).is_err());
+    }
+
+    #[test]
+    fn assert_expected_count_mismatch_lax_ok() {
+        assert!(assert_expected_count(2, 3, "items", false).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_list_items_no_next_is_ok() {
+        assert!(validate_no_extra_list_items(None, 1, 3, true).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_list_items_wrong_depth_is_ok() {
+        let line = make_line("- one", 0, 5);
+        assert!(validate_no_extra_list_items(Some(&line), 1, 3, true).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_list_items_same_depth_strict_errors() {
+        let line = make_line("- extra", 1, 10);
+        assert!(validate_no_extra_list_items(Some(&line), 1, 3, true).is_err());
+    }
+
+    #[test]
+    fn validate_no_extra_list_items_same_depth_lax_ok() {
+        let line = make_line("- extra", 1, 10);
+        assert!(validate_no_extra_list_items(Some(&line), 1, 3, false).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_list_items_non_list_content_ok() {
+        let line = make_line("k: v", 1, 10);
+        assert!(validate_no_extra_list_items(Some(&line), 1, 3, true).is_ok());
+    }
+
+    fn make_tabular_header(delimiter: char) -> ArrayHeaderInfo {
+        ArrayHeaderInfo {
+            key: None,
+            key_was_quoted: false,
+            length: 2,
+            delimiter,
+            fields: Some(vec![]),
+        }
+    }
+
+    #[test]
+    fn validate_no_extra_tabular_rows_accepts_non_data_row() {
+        let header = make_tabular_header(',');
+        let line = make_line("k: v", 1, 10);
+        assert!(validate_no_extra_tabular_rows(Some(&line), 1, &header, true).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_tabular_rows_rejects_data_row_strict() {
+        let header = make_tabular_header(',');
+        let line = make_line("extra,data", 1, 10);
+        assert!(validate_no_extra_tabular_rows(Some(&line), 1, &header, true).is_err());
+    }
+
+    #[test]
+    fn validate_no_extra_tabular_rows_wrong_depth_ok() {
+        let header = make_tabular_header(',');
+        let line = make_line("extra,data", 0, 10);
+        assert!(validate_no_extra_tabular_rows(Some(&line), 1, &header, true).is_ok());
+    }
+
+    #[test]
+    fn validate_no_extra_tabular_rows_list_item_ok() {
+        let header = make_tabular_header(',');
+        let line = make_line("- extra", 1, 10);
+        assert!(validate_no_extra_tabular_rows(Some(&line), 1, &header, true).is_ok());
+    }
+
+    #[test]
+    fn validate_no_blank_lines_in_range_none_is_ok() {
+        let blanks: Vec<BlankLineInfo> = Vec::new();
+        assert!(validate_no_blank_lines_in_range(1, 5, &blanks, true, "ctx").is_ok());
+    }
+
+    #[test]
+    fn validate_no_blank_lines_in_range_outside_window_ok() {
+        let blanks = vec![BlankLineInfo {
+            line_number: 10,
+            indent: 0,
+            depth: 0,
+        }];
+        assert!(validate_no_blank_lines_in_range(1, 5, &blanks, true, "ctx").is_ok());
+    }
+
+    #[test]
+    fn validate_no_blank_lines_in_range_inside_window_errors_strict() {
+        let blanks = vec![BlankLineInfo {
+            line_number: 3,
+            indent: 0,
+            depth: 0,
+        }];
+        let err =
+            validate_no_blank_lines_in_range(1, 5, &blanks, true, "tabular array").unwrap_err();
+        let msg = format!("{err}");
+        assert!(msg.contains("Line 3"));
+        assert!(msg.contains("tabular array"));
+    }
+
+    #[test]
+    fn validate_no_blank_lines_in_range_lax_ok() {
+        let blanks = vec![BlankLineInfo {
+            line_number: 3,
+            indent: 0,
+            depth: 0,
+        }];
+        assert!(validate_no_blank_lines_in_range(1, 5, &blanks, false, "ctx").is_ok());
+    }
+
+    #[test]
+    fn is_data_row_without_colon() {
+        assert!(is_data_row("a,b,c", ','));
+    }
+
+    #[test]
+    fn is_data_row_with_delimiter_before_colon() {
+        assert!(is_data_row("a,b:c", ','));
+    }
+
+    #[test]
+    fn is_data_row_with_colon_before_delimiter_is_key_value() {
+        assert!(!is_data_row("a:b,c", ','));
+    }
+
+    #[test]
+    fn is_data_row_with_quoted_colon_inside_string() {
+        // The colon is inside quotes so the first unquoted delimiter wins.
+        assert!(is_data_row("\"a:b\",c", ','));
+    }
+}

@@ -91,3 +91,154 @@ fn format_number(value: f64) -> String {
     }
     value.to_string()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encode_null_primitive() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Null, ','),
+            "null"
+        );
+    }
+
+    #[test]
+    fn encode_bool_primitive() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Bool(true), ','),
+            "true"
+        );
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Bool(false), ','),
+            "false"
+        );
+    }
+
+    #[test]
+    fn encode_number_zero_is_bare_zero() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Number(0.0), ','),
+            "0"
+        );
+    }
+
+    #[test]
+    fn encode_number_nan_is_null() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Number(f64::NAN), ','),
+            "null"
+        );
+    }
+
+    #[test]
+    fn encode_number_infinity_is_null() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::Number(f64::INFINITY), ','),
+            "null"
+        );
+    }
+
+    #[test]
+    fn encode_simple_string_is_unquoted() {
+        assert_eq!(
+            encode_primitive(&StringOrNumberOrBoolOrNull::String("hello".into()), ','),
+            "hello"
+        );
+    }
+
+    #[test]
+    fn encode_string_with_comma_is_quoted_when_delimiter_is_comma() {
+        let out = encode_primitive(&StringOrNumberOrBoolOrNull::String("a,b".into()), ',');
+        assert!(out.starts_with('"'));
+        assert!(out.ends_with('"'));
+        assert!(out.contains("a,b"));
+    }
+
+    #[test]
+    fn encode_string_with_newline_is_escaped_and_quoted() {
+        let out = encode_string_literal("line\nfeed", ',');
+        assert_eq!(out, "\"line\\nfeed\"");
+    }
+
+    #[test]
+    fn encode_string_that_looks_like_bool_is_quoted() {
+        let out = encode_string_literal("true", ',');
+        assert_eq!(out, "\"true\"");
+    }
+
+    #[test]
+    fn encode_key_valid_is_unquoted() {
+        assert_eq!(encode_key("valid_key"), "valid_key");
+    }
+
+    #[test]
+    fn encode_key_with_space_is_quoted() {
+        let out = encode_key("has space");
+        assert!(out.starts_with('"'));
+        assert!(out.contains("has space"));
+    }
+
+    #[test]
+    fn encode_key_with_quotes_is_escaped() {
+        let out = encode_key("a\"b");
+        assert_eq!(out, "\"a\\\"b\"");
+    }
+
+    #[test]
+    fn encode_and_join_primitives_empty_is_empty() {
+        assert_eq!(encode_and_join_primitives(&[], ','), "");
+    }
+
+    #[test]
+    fn encode_and_join_primitives_joins_with_delimiter() {
+        let vals = vec![
+            StringOrNumberOrBoolOrNull::Number(1.0),
+            StringOrNumberOrBoolOrNull::String("two".into()),
+            StringOrNumberOrBoolOrNull::Bool(true),
+        ];
+        assert_eq!(encode_and_join_primitives(&vals, ','), "1,two,true");
+    }
+
+    #[test]
+    fn encode_and_join_primitives_different_delimiters() {
+        let vals = vec![
+            StringOrNumberOrBoolOrNull::Number(1.0),
+            StringOrNumberOrBoolOrNull::Number(2.0),
+        ];
+        assert_eq!(encode_and_join_primitives(&vals, '|'), "1|2");
+        assert_eq!(encode_and_join_primitives(&vals, '\t'), "1\t2");
+    }
+
+    #[test]
+    fn format_header_length_only_default_delimiter() {
+        assert_eq!(format_header(3, None, None, ','), "[3]:");
+    }
+
+    #[test]
+    fn format_header_length_only_custom_delimiter() {
+        assert_eq!(format_header(3, None, None, '|'), "[3|]:");
+    }
+
+    #[test]
+    fn format_header_with_key_and_fields() {
+        let fields = vec!["id".to_string(), "name".to_string()];
+        assert_eq!(
+            format_header(2, Some("users"), Some(&fields), ','),
+            "users[2]{id,name}:"
+        );
+    }
+
+    #[test]
+    fn format_header_with_quoted_field_name() {
+        let fields = vec!["weird name".to_string()];
+        let out = format_header(1, Some("data"), Some(&fields), ',');
+        assert!(out.contains("{\"weird name\"}"));
+    }
+
+    #[test]
+    fn format_header_zero_length() {
+        assert_eq!(format_header(0, Some("items"), None, ','), "items[0]:");
+    }
+}

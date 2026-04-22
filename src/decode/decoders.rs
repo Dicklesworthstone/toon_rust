@@ -510,3 +510,232 @@ fn is_key_value_line_sync(line: &ParsedLine) -> bool {
     }
     content.contains(COLON)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::StringOrNumberOrBoolOrNull;
+
+    fn decode(input: &str) -> Vec<JsonStreamEvent> {
+        decode_stream_sync(input.lines().map(String::from), None).unwrap()
+    }
+
+    fn decode_lax(input: &str) -> Vec<JsonStreamEvent> {
+        decode_stream_sync(
+            input.lines().map(String::from),
+            Some(DecodeStreamOptions {
+                indent: None,
+                strict: Some(false),
+            }),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn empty_input_produces_empty_object() {
+        let events = decode("");
+        assert!(matches!(events.first(), Some(JsonStreamEvent::StartObject)));
+        assert!(matches!(events.last(), Some(JsonStreamEvent::EndObject)));
+        assert_eq!(events.len(), 2);
+    }
+
+    #[test]
+    fn decode_primitive_string() {
+        let events = decode("hello");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::String(s),
+            } if s == "hello"
+        ));
+    }
+
+    #[test]
+    fn decode_primitive_number() {
+        let events = decode("42");
+        assert_eq!(events.len(), 1);
+        assert!(matches!(
+            &events[0],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::Number(v),
+            } if (*v - 42.0).abs() < f64::EPSILON
+        ));
+    }
+
+    #[test]
+    fn decode_primitive_bool_and_null() {
+        assert!(matches!(
+            decode("true")[0],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::Bool(true),
+            }
+        ));
+        assert!(matches!(
+            decode("false")[0],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::Bool(false),
+            }
+        ));
+        assert!(matches!(
+            decode("null")[0],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::Null,
+            }
+        ));
+    }
+
+    #[test]
+    fn decode_simple_key_value_object() {
+        let events = decode("name: Alice\nage: 30");
+        assert!(matches!(events[0], JsonStreamEvent::StartObject));
+        assert!(matches!(
+            &events[1],
+            JsonStreamEvent::Key { key, .. } if key == "name"
+        ));
+        assert!(matches!(
+            &events[2],
+            JsonStreamEvent::Primitive {
+                value: StringOrNumberOrBoolOrNull::String(s),
+            } if s == "Alice"
+        ));
+        assert!(matches!(
+            &events[3],
+            JsonStreamEvent::Key { key, .. } if key == "age"
+        ));
+        assert!(matches!(events.last(), Some(JsonStreamEvent::EndObject)));
+    }
+
+    #[test]
+    fn decode_inline_primitive_array() {
+        let events = decode("tags[3]: red,green,blue");
+        assert!(matches!(events[0], JsonStreamEvent::StartObject));
+        assert!(matches!(
+            &events[1],
+            JsonStreamEvent::Key { key, .. } if key == "tags"
+        ));
+        assert!(matches!(
+            events[2],
+            JsonStreamEvent::StartArray { length: 3 }
+        ));
+        let red = &events[3];
+        assert!(
+            matches!(red, JsonStreamEvent::Primitive { value: StringOrNumberOrBoolOrNull::String(s) } if s == "red")
+        );
+    }
+
+    #[test]
+    fn decode_empty_array() {
+        let events = decode("items[0]:");
+        assert!(matches!(
+            events[2],
+            JsonStreamEvent::StartArray { length: 0 }
+        ));
+        assert!(matches!(events[3], JsonStreamEvent::EndArray));
+    }
+
+    #[test]
+    fn decode_tabular_array() {
+        let events = decode("users[2]{id,name}:\n  1,Alice\n  2,Bob");
+        assert!(matches!(
+            events[2],
+            JsonStreamEvent::StartArray { length: 2 }
+        ));
+        // Expect 2 row objects, each with 2 key/primitive pairs
+        assert!(
+            events
+                .iter()
+                .filter(|e| matches!(e, JsonStreamEvent::StartObject))
+                .count()
+                >= 3
+        );
+    }
+
+    #[test]
+    fn decode_quoted_key_preserves_was_quoted_flag() {
+        let events = decode("\"weird key\": 1");
+        assert!(matches!(
+            &events[1],
+            JsonStreamEvent::Key { key, was_quoted: true } if key == "weird key"
+        ));
+    }
+
+    #[test]
+    fn decode_nested_object() {
+        let events = decode("user:\n  id: 1\n  name: Alice");
+        let start_count = events
+            .iter()
+            .filter(|e| matches!(e, JsonStreamEvent::StartObject))
+            .count();
+        assert_eq!(start_count, 2, "expected 2 StartObject events");
+    }
+
+    #[test]
+    fn decode_list_array_of_objects() {
+        let events = decode("rows[2]:\n  - a: 1\n  - a: 2");
+        // Expect StartArray with length 2, then two object items
+        let has_start_array = events
+            .iter()
+            .any(|e| matches!(e, JsonStreamEvent::StartArray { length: 2 }));
+        assert!(has_start_array);
+    }
+
+    #[test]
+    fn decode_extra_items_errors_in_strict_mode() {
+        let result = decode_stream_sync("items[1]: a,b".lines().map(String::from), None);
+        assert!(result.is_err(), "strict mode should reject length mismatch");
+    }
+
+    #[test]
+    fn decode_extra_items_tolerated_in_lax_mode() {
+        let events = decode_lax("items[1]: a,b");
+        assert!(matches!(
+            events
+                .iter()
+                .find(|e| matches!(e, JsonStreamEvent::StartArray { .. })),
+            Some(JsonStreamEvent::StartArray { length: 1 })
+        ));
+    }
+
+    #[test]
+    fn decode_huge_declared_length_rejected() {
+        let result = decode_stream_sync("items[9999999999]:".lines().map(String::from), None);
+        assert!(result.is_err(), "cap on declared length should fire");
+    }
+
+    #[test]
+    fn is_key_value_line_sync_detects_quoted_keys() {
+        let line = ParsedLine {
+            raw: "\"k\": v".to_string(),
+            indent: 0,
+            content: "\"k\": v".to_string(),
+            depth: 0,
+            line_number: 1,
+        };
+        assert!(is_key_value_line_sync(&line));
+    }
+
+    #[test]
+    fn is_key_value_line_sync_detects_bare_keys() {
+        let line = ParsedLine {
+            raw: "k: v".to_string(),
+            indent: 0,
+            content: "k: v".to_string(),
+            depth: 0,
+            line_number: 1,
+        };
+        assert!(is_key_value_line_sync(&line));
+    }
+
+    #[test]
+    fn is_key_value_line_sync_rejects_plain_strings() {
+        let line = ParsedLine {
+            raw: "plain".to_string(),
+            indent: 0,
+            content: "plain".to_string(),
+            depth: 0,
+            line_number: 1,
+        };
+        assert!(!is_key_value_line_sync(&line));
+    }
+}
