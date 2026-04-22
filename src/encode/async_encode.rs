@@ -22,6 +22,7 @@
 use crate::encode::encoders;
 use crate::encode::normalize::normalize_json_value;
 use crate::encode::replacer::apply_replacer;
+use crate::error::Result;
 use crate::options::{EncodeOptions, ResolvedEncodeOptions, resolve_encode_options};
 use crate::shared::validation::is_valid_unquoted_key;
 use crate::{JsonStreamEvent, JsonValue};
@@ -43,8 +44,23 @@ pub struct AsyncEncodeStream {
 
 impl AsyncEncodeStream {
     /// Create a new async encode stream from a JSON value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying encoding pipeline fails. In practice encoding a
+    /// normalized `JsonValue` is infallible today; callers that need to surface
+    /// errors should use [`Self::try_new`] instead.
     #[must_use]
     pub fn new(input: impl Into<JsonValue>, options: Option<EncodeOptions>) -> Self {
+        Self::try_new(input, options).expect("AsyncEncodeStream::new failed")
+    }
+
+    /// Fallible counterpart to [`Self::new`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the replacer or encoder pipeline surfaces one.
+    pub fn try_new(input: impl Into<JsonValue>, options: Option<EncodeOptions>) -> Result<Self> {
         let resolved = resolve_encode_options(options);
         let normalized = normalize_json_value(input.into());
         let replaced = if let Some(replacer) = &resolved.replacer {
@@ -54,18 +70,18 @@ impl AsyncEncodeStream {
         };
         let lines = encoders::encode_json_value(&replaced, &resolved);
 
-        Self { lines, index: 0 }
+        Ok(Self { lines, index: 0 })
     }
 
     /// Get the total number of lines.
     #[must_use]
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.lines.len()
     }
 
     /// Check if the stream is empty.
     #[must_use]
-    pub fn is_empty(&self) -> bool {
+    pub const fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
 }
@@ -114,8 +130,22 @@ enum EncodeStackFrame {
 
 impl AsyncEncodeEventStream {
     /// Create a new async event stream from a JSON value.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying pipeline fails. Use [`Self::try_new`] to
+    /// propagate errors instead.
     #[must_use]
     pub fn new(input: impl Into<JsonValue>, options: Option<EncodeOptions>) -> Self {
+        Self::try_new(input, options).expect("AsyncEncodeEventStream::new failed")
+    }
+
+    /// Fallible counterpart to [`Self::new`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the replacer or encoder pipeline surfaces one.
+    pub fn try_new(input: impl Into<JsonValue>, options: Option<EncodeOptions>) -> Result<Self> {
         let resolved = resolve_encode_options(options);
         let normalized = normalize_json_value(input.into());
         let replaced = if let Some(replacer) = &resolved.replacer {
@@ -124,12 +154,12 @@ impl AsyncEncodeEventStream {
             normalized
         };
 
-        Self {
+        Ok(Self {
             stack: Vec::new(),
             options: resolved,
             started: false,
             root: Some(replaced),
-        }
+        })
     }
 
     fn next_event(&mut self) -> Option<JsonStreamEvent> {
@@ -224,10 +254,29 @@ impl Stream for AsyncEncodeEventStream {
 ///
 /// This function creates an async stream and collects all lines. The async
 /// wrapper provides yield points for cooperative scheduling.
+///
+/// # Panics
+///
+/// Panics if the underlying encoder pipeline fails. Use
+/// [`try_encode_lines_async`] to surface errors as a `Result`.
 pub async fn encode_lines_async(
     input: impl Into<JsonValue>,
     options: Option<EncodeOptions>,
 ) -> Vec<String> {
+    try_encode_lines_async(input, options)
+        .await
+        .expect("encode_lines_async failed")
+}
+
+/// Fallible counterpart to [`encode_lines_async`].
+///
+/// # Errors
+///
+/// Returns an error when the replacer or encoder pipeline surfaces one.
+pub async fn try_encode_lines_async(
+    input: impl Into<JsonValue>,
+    options: Option<EncodeOptions>,
+) -> Result<Vec<String>> {
     let input = input.into();
 
     // Use asupersync's iter() to create a yielding stream from the lines
@@ -246,24 +295,63 @@ pub async fn encode_lines_async(
     // Count forces iteration with yield points
     let _count = line_stream.count().await;
 
-    lines
+    Ok(lines)
 }
 
 /// Encode a JSON value to a TOON string asynchronously.
+///
+/// # Panics
+///
+/// Panics if the underlying encoder pipeline fails. Use [`try_encode_async`]
+/// to surface errors as a `Result`.
 pub async fn encode_async(input: impl Into<JsonValue>, options: Option<EncodeOptions>) -> String {
-    let lines = encode_lines_async(input, options).await;
-    lines.join("\n")
+    try_encode_async(input, options)
+        .await
+        .expect("encode_async failed")
+}
+
+/// Fallible counterpart to [`encode_async`].
+///
+/// # Errors
+///
+/// Returns an error when the replacer or encoder pipeline surfaces one.
+pub async fn try_encode_async(
+    input: impl Into<JsonValue>,
+    options: Option<EncodeOptions>,
+) -> Result<String> {
+    let lines = try_encode_lines_async(input, options).await?;
+    Ok(lines.join("\n"))
 }
 
 /// Encode a JSON value to events asynchronously.
 ///
 /// Returns a vector of `JsonStreamEvent` items representing the structure.
+///
+/// # Panics
+///
+/// Panics if the underlying pipeline fails. Use [`try_encode_events_async`]
+/// to surface errors as a `Result`.
 pub async fn encode_events_async(
     input: impl Into<JsonValue>,
     options: Option<EncodeOptions>,
 ) -> Vec<JsonStreamEvent> {
+    try_encode_events_async(input, options)
+        .await
+        .expect("encode_events_async failed")
+}
+
+/// Fallible counterpart to [`encode_events_async`].
+///
+/// # Errors
+///
+/// Returns an error when the replacer or encoder pipeline surfaces one.
+#[allow(clippy::unused_async)]
+pub async fn try_encode_events_async(
+    input: impl Into<JsonValue>,
+    options: Option<EncodeOptions>,
+) -> Result<Vec<JsonStreamEvent>> {
     let input = input.into();
-    let mut stream = AsyncEncodeEventStream::new(input, options);
+    let mut stream = AsyncEncodeEventStream::try_new(input, options)?;
 
     // Collect all events
     let mut events = Vec::new();
@@ -271,7 +359,7 @@ pub async fn encode_events_async(
         events.push(event);
     }
 
-    events
+    Ok(events)
 }
 
 #[cfg(test)]
