@@ -5,26 +5,48 @@ use crate::error::{Result, ToonError};
 use crate::shared::constants::DOT;
 use crate::shared::validation::is_identifier_segment;
 
+/// Hard cap on recursion depth during path expansion. Protects against stack
+/// overflow on pathologically nested TOON inputs (deeply nested arrays, deeply
+/// nested objects, or dotted keys with thousands of segments).
+const MAX_EXPAND_DEPTH: usize = 256;
+
+fn depth_error() -> ToonError {
+    ToonError::message(format!(
+        "Path expansion exceeded maximum depth of {MAX_EXPAND_DEPTH}"
+    ))
+}
+
 /// Expand dotted keys into nested objects (safe mode).
 ///
 /// # Errors
 ///
-/// Returns an error in strict mode when path expansion encounters a conflict.
+/// Returns an error in strict mode when path expansion encounters a conflict,
+/// or when recursion depth exceeds the hard limit.
 pub fn expand_paths_safe(value: NodeValue, strict: bool) -> Result<NodeValue> {
+    expand_paths_safe_inner(value, strict, 0)
+}
+
+fn expand_paths_safe_inner(value: NodeValue, strict: bool, depth: usize) -> Result<NodeValue> {
+    if depth >= MAX_EXPAND_DEPTH {
+        return Err(depth_error());
+    }
     match value {
         NodeValue::Array(items) => {
             let mut expanded = Vec::with_capacity(items.len());
             for item in items {
-                expanded.push(expand_paths_safe(item, strict)?);
+                expanded.push(expand_paths_safe_inner(item, strict, depth + 1)?);
             }
             Ok(NodeValue::Array(expanded))
         }
-        NodeValue::Object(obj) => Ok(NodeValue::Object(expand_object(obj, strict)?)),
+        NodeValue::Object(obj) => Ok(NodeValue::Object(expand_object(obj, strict, depth + 1)?)),
         NodeValue::Primitive(value) => Ok(NodeValue::Primitive(value)),
     }
 }
 
-fn expand_object(obj: ObjectNode, strict: bool) -> Result<ObjectNode> {
+fn expand_object(obj: ObjectNode, strict: bool, depth: usize) -> Result<ObjectNode> {
+    if depth >= MAX_EXPAND_DEPTH {
+        return Err(depth_error());
+    }
     let quoted_keys = obj.quoted_keys;
     let mut expanded = ObjectNode {
         entries: Vec::new(),
@@ -32,7 +54,7 @@ fn expand_object(obj: ObjectNode, strict: bool) -> Result<ObjectNode> {
     };
 
     for (key, value) in obj.entries {
-        let value = expand_paths_safe(value, strict)?;
+        let value = expand_paths_safe_inner(value, strict, depth + 1)?;
         let is_quoted = quoted_keys.contains(&key);
 
         if key.contains(DOT) && !is_quoted {
@@ -41,12 +63,12 @@ fn expand_object(obj: ObjectNode, strict: bool) -> Result<ObjectNode> {
                 .iter()
                 .all(|segment| is_identifier_segment(segment))
             {
-                insert_path_entries(&mut expanded.entries, &segments, value, strict)?;
+                insert_path_entries(&mut expanded.entries, &segments, value, strict, depth + 1)?;
                 continue;
             }
         }
 
-        insert_literal_entry(&mut expanded.entries, key, value, strict)?;
+        insert_literal_entry(&mut expanded.entries, key, value, strict, depth + 1)?;
     }
 
     Ok(expanded)
@@ -57,13 +79,17 @@ fn insert_path_entries(
     segments: &[&str],
     value: NodeValue,
     strict: bool,
+    depth: usize,
 ) -> Result<()> {
+    if depth >= MAX_EXPAND_DEPTH {
+        return Err(depth_error());
+    }
     if segments.is_empty() {
         return Ok(());
     }
 
     if segments.len() == 1 {
-        return insert_literal_entry(entries, segments[0].to_string(), value, strict);
+        return insert_literal_entry(entries, segments[0].to_string(), value, strict, depth + 1);
     }
 
     let key = segments[0].to_string();
@@ -83,7 +109,7 @@ fn insert_path_entries(
         }
 
         if let NodeValue::Object(obj) = &mut entries[index].1 {
-            return insert_path_entries(&mut obj.entries, &segments[1..], value, strict);
+            return insert_path_entries(&mut obj.entries, &segments[1..], value, strict, depth + 1);
         }
     } else {
         entries.push((
@@ -95,7 +121,7 @@ fn insert_path_entries(
         ));
         let index = entries.len() - 1;
         if let NodeValue::Object(obj) = &mut entries[index].1 {
-            return insert_path_entries(&mut obj.entries, &segments[1..], value, strict);
+            return insert_path_entries(&mut obj.entries, &segments[1..], value, strict, depth + 1);
         }
     }
 
@@ -107,13 +133,17 @@ fn insert_literal_entry(
     key: String,
     value: NodeValue,
     strict: bool,
+    depth: usize,
 ) -> Result<()> {
+    if depth >= MAX_EXPAND_DEPTH {
+        return Err(depth_error());
+    }
     if let Some(index) = find_entry_index(entries, &key) {
         let existing = entries[index].1.clone();
         if can_merge(&existing, &value) {
             let mut existing_obj = extract_object(existing)?;
             let source_obj = extract_object(value)?;
-            merge_objects(&mut existing_obj, source_obj, strict)?;
+            merge_objects(&mut existing_obj, source_obj, strict, depth + 1)?;
             entries[index].1 = NodeValue::Object(existing_obj);
         } else if strict {
             return Err(ToonError::message(format!(
@@ -131,14 +161,22 @@ fn insert_literal_entry(
     Ok(())
 }
 
-fn merge_objects(target: &mut ObjectNode, source: ObjectNode, strict: bool) -> Result<()> {
+fn merge_objects(
+    target: &mut ObjectNode,
+    source: ObjectNode,
+    strict: bool,
+    depth: usize,
+) -> Result<()> {
+    if depth >= MAX_EXPAND_DEPTH {
+        return Err(depth_error());
+    }
     for (key, value) in source.entries {
         if let Some(index) = find_entry_index(&target.entries, &key) {
             let existing = target.entries[index].1.clone();
             if can_merge(&existing, &value) {
                 let mut existing_obj = extract_object(existing)?;
                 let source_obj = extract_object(value)?;
-                merge_objects(&mut existing_obj, source_obj, strict)?;
+                merge_objects(&mut existing_obj, source_obj, strict, depth + 1)?;
                 target.entries[index].1 = NodeValue::Object(existing_obj);
             } else if strict {
                 return Err(ToonError::message(format!(

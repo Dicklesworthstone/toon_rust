@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: msg
+---
+Path expansion conflict at key "b": cannot merge primitive with primitive

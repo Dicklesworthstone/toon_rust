@@ -102,6 +102,15 @@ pub fn parse_array_header_line(
         return Ok(None);
     };
 
+    // Enforce the declared-length cap only once we know this line is a real
+    // array header (bracket parsed cleanly); surface a hard error instead of
+    // silently falling back to key-value handling.
+    if length > MAX_DECLARED_ARRAY_LENGTH {
+        return Err(ToonError::message(format!(
+            "Declared array length {length} exceeds maximum allowed ({MAX_DECLARED_ARRAY_LENGTH})"
+        )));
+    }
+
     let mut fields: Option<Vec<FieldName>> = None;
     if let Some(brace_start) = brace_start
         && brace_start < colon_index
@@ -139,11 +148,22 @@ pub fn parse_array_header_line(
     }))
 }
 
+/// Hard cap on the declared length that appears inside an array header `[N]`.
+///
+/// A TOON file claiming e.g. `[9999999999]` should not be allowed to drive
+/// downstream allocations or loop bounds sized from that number; 100 million
+/// is well beyond any realistic payload while still preventing resource abuse.
+pub const MAX_DECLARED_ARRAY_LENGTH: usize = 100_000_000;
+
 /// Parse the bracket length segment, extracting length and delimiter.
+///
+/// The cap on declared length is enforced by [`parse_array_header_line`] after a
+/// successful parse so that unrelated `[abc]` literals inside key-value content
+/// still fall through to non-array handling instead of erroring.
 ///
 /// # Errors
 ///
-/// Returns an error if the length is invalid.
+/// Returns an error if the length is not a valid unsigned integer.
 pub fn parse_bracket_segment(seg: &str, default_delimiter: char) -> Result<(usize, char)> {
     let mut content = seg.to_string();
     let mut delimiter = default_delimiter;

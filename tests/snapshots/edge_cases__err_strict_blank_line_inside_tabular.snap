@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_strict_err(input)
+---
+Line 3: Blank lines inside tabular array are not allowed in strict mode

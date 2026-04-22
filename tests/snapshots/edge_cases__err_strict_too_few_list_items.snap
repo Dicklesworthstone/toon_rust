@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_strict_err(input)
+---
+Expected 3 list array items, but got 1

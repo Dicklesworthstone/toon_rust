@@ -10,9 +10,31 @@
 //! - Delimiter edge cases
 //! - Key folding conflict scenarios
 
+use insta::assert_snapshot;
 use proptest::prelude::*;
 use toon::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
 use toon::{JsonValue, decode, encode, try_decode};
+
+/// Helper: decode with defaults and return the error message string.
+fn decode_err(input: &str) -> String {
+    try_decode(input, None)
+        .err()
+        .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string())
+}
+
+/// Helper: decode in strict mode and return the error message string.
+fn decode_strict_err(input: &str) -> String {
+    try_decode(
+        input,
+        Some(DecodeOptions {
+            indent: None,
+            strict: Some(true),
+            expand_paths: None,
+        }),
+    )
+    .err()
+    .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string())
+}
 
 // ============================================================================
 // UNICODE EDGE CASES
@@ -570,16 +592,177 @@ proptest! {
 
 #[test]
 fn strict_mode_rejects_tabs() {
-    let toon_with_tabs = "\tname: value";
-    let result = try_decode(
-        toon_with_tabs,
+    let msg = decode_strict_err("\tname: value");
+    assert_snapshot!(msg);
+}
+
+// ============================================================================
+// ERROR MESSAGE SNAPSHOTS
+// ----------------------------------------------------------------------------
+// These tests lock in the exact error surface so an unintended wording change
+// fails CI instead of silently drifting. When an error message legitimately
+// changes, re-record with `cargo insta review`.
+// ============================================================================
+
+#[test]
+fn err_strict_blank_line_inside_list_array() {
+    let input = "items[2]:\n  - a\n\n  - b";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_blank_line_inside_tabular() {
+    let input = "rows[2]{id}:\n  1\n\n  2";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_extra_list_items() {
+    let input = "items[1]:\n  - a\n  - b";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_extra_tabular_rows() {
+    let input = "rows[1]{id}:\n  1\n  2";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_too_few_list_items() {
+    let input = "items[3]:\n  - a";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_too_few_inline_items() {
+    let input = "items[3]: a,b";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_tabular_row_width_mismatch() {
+    let input = "rows[1]{a,b,c}:\n  1,2";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_huge_declared_length_rejected() {
+    let input = "items[9999999999]:";
+    assert_snapshot!(decode_err(input));
+}
+
+#[test]
+fn err_unterminated_quoted_string_value() {
+    let input = "name: \"unterminated";
+    assert_snapshot!(decode_err(input));
+}
+
+#[test]
+fn err_unterminated_quoted_key() {
+    let input = "\"unterminated key: value";
+    assert_snapshot!(decode_err(input));
+}
+
+#[test]
+fn err_invalid_escape_in_string() {
+    let input = "name: \"bad \\x escape\"";
+    assert_snapshot!(decode_err(input));
+}
+
+#[test]
+fn err_path_expansion_conflict() {
+    let input = "a.b: 1\na:\n  b: 2";
+    let msg = try_decode(
+        input,
         Some(DecodeOptions {
             indent: None,
             strict: Some(true),
-            expand_paths: None,
+            expand_paths: Some(ExpandPathsMode::Safe),
         }),
-    );
-    assert!(result.is_err());
+    )
+    .err()
+    .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string());
+    assert_snapshot!(msg);
+}
+
+#[test]
+fn err_strict_rejects_tab_indent_in_list() {
+    let input = "items[1]:\n\t- a";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_strict_indentation_not_multiple() {
+    let input = "outer:\n a: 1";
+    assert_snapshot!(decode_strict_err(input));
+}
+
+#[test]
+fn err_invalid_json_input_to_json_to_toon() {
+    let msg = toon::json_to_toon("{not: valid json}")
+        .err()
+        .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string());
+    assert_snapshot!(msg);
+}
+
+#[test]
+fn err_invalid_toon_input_to_toon_to_json() {
+    // Invalid because the declared length exceeds the cap.
+    let msg = toon::toon_to_json("items[9999999999]:")
+        .err()
+        .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string());
+    assert_snapshot!(msg);
+}
+
+#[test]
+fn err_expand_paths_exceeds_depth_limit() {
+    // Build a single-line dotted key chain deeper than MAX_EXPAND_DEPTH (256).
+    // Each a.a.a.... segment recurses once in insert_path_entries.
+    let segments: Vec<&str> = std::iter::repeat_n("a", 400).collect();
+    let key = segments.join(".");
+    let input = format!("{key}: 1");
+    let msg = try_decode(
+        &input,
+        Some(DecodeOptions {
+            indent: None,
+            strict: Some(true),
+            expand_paths: Some(ExpandPathsMode::Safe),
+        }),
+    )
+    .err()
+    .map_or_else(|| "<unexpectedly succeeded>".to_string(), |e| e.to_string());
+    assert_snapshot!(msg);
+}
+
+#[test]
+fn err_malformed_array_header_missing_close_bracket() {
+    let input = "items[3: a,b,c";
+    assert_snapshot!(decode_err(input));
+}
+
+#[test]
+fn err_bare_key_missing_colon_treated_as_primitive() {
+    // Without a colon this parses as a bare primitive ("no_colon"), not an error.
+    // Snapshot the success-to-string to lock the surface.
+    let result = try_decode("no_colon", None).map(|v| format!("{v:?}"));
+    let out = match result {
+        Ok(s) => format!("Ok: {s}"),
+        Err(e) => format!("Err: {e}"),
+    };
+    assert_snapshot!(out);
+}
+
+#[test]
+fn err_bracket_segment_invalid_length_falls_back() {
+    // "key[abc]: value" fails array-header parse and falls through to key/value
+    // handling. Snapshot the resulting parse to lock that fallback behavior.
+    let result = try_decode("key[abc]: value", None);
+    let out = match result {
+        Ok(v) => format!("Ok: {v:?}"),
+        Err(e) => format!("Err: {e}"),
+    };
+    assert_snapshot!(out);
 }
 
 #[test]

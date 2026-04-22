@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: msg
+---
+Path expansion exceeded maximum depth of 256

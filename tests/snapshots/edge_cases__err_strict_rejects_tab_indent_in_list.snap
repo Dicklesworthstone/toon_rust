@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_strict_err(input)
+---
+Validation error at line 2: Tabs are not allowed in indentation in strict mode

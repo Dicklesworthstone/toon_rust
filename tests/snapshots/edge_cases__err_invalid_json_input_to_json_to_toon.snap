@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: msg
+---
+JSON error: Failed to parse JSON: key must be a string at line 1 column 2

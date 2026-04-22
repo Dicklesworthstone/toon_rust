@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_err(input)
+---
+<unexpectedly succeeded>

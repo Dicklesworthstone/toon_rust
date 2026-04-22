@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_strict_err(input)
+---
+Validation error at line 2: Indentation must be exact multiple of 2, but found 1 spaces

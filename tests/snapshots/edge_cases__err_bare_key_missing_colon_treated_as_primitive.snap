@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: out
+---
+Ok: Primitive(String("no_colon"))

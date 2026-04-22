@@ -1,0 +1,5 @@
+---
+source: tests/edge_cases.rs
+expression: decode_err(input)
+---
+Declared array length 9999999999 exceeds maximum allowed (100000000)
