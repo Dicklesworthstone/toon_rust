@@ -12,12 +12,22 @@ download() {
   local url="$1"
   local out="$2"
   if command -v curl >/dev/null 2>&1; then
-    curl -fL "$url" -o "$out"
-    return 0
+    local attempt
+    for attempt in 1 2 3; do
+      if curl -fL --retry 2 --retry-delay 1 --retry-all-errors "$url" -o "$out"; then
+        [[ -s "$out" ]] && return 0
+      fi
+      log "Download attempt $attempt failed"
+    done
   fi
   if command -v wget >/dev/null 2>&1; then
-    wget -O "$out" "$url"
-    return 0
+    local attempt
+    for attempt in 1 2 3; do
+      if wget -O "$out" "$url"; then
+        [[ -s "$out" ]] && return 0
+      fi
+      log "Download attempt $attempt failed"
+    done
   fi
   return 1
 }
@@ -72,12 +82,12 @@ fi
 
 if [[ "$platform" == "windows" ]]; then
   if command -v unzip >/dev/null 2>&1; then
-    unzip -o "$archive" -d "$tmpdir" >/dev/null
+    unzip -o "$archive" -d "$tmpdir" >/dev/null || fail "failed to extract $asset"
   else
     fail "unzip not found (required for windows zip)"
   fi
 else
-  tar -xJf "$archive" -C "$tmpdir"
+  tar -xJf "$archive" -C "$tmpdir" || fail "failed to extract $asset"
 fi
 
 if [[ ! -f "$tmpdir/$bin_file" ]]; then
