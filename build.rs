@@ -1,10 +1,15 @@
 use std::{env, process::Command};
-use vergen_gix::{BuildBuilder, CargoBuilder, Emitter, RustcBuilder};
+// vergen-gix 10 replaced the standalone `XxxBuilder::default()` types with a
+// `builder()` method on each config struct (`Build`/`Cargo`/`Rustc`); `Emitter`
+// is unchanged.
+use vergen_gix::{Build, Cargo, Emitter, Rustc};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let build = BuildBuilder::default().build_timestamp(true).build()?;
-    let cargo = CargoBuilder::default().target_triple(true).build()?;
-    let rustc = RustcBuilder::default().semver(true).build()?;
+    // vergen-gix 10's bon-based builders return the value directly (not a
+    // `Result`), so these no longer need `?`.
+    let build = Build::builder().build_timestamp(true).build();
+    let cargo = Cargo::builder().target_triple(true).build();
+    let rustc = Rustc::builder().semver(true).build();
 
     Emitter::default()
         .add_instructions(&build)?

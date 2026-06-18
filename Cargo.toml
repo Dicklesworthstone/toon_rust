@@ -61,7 +61,7 @@ console_error_panic_hook = { version = "0.1", optional = true }
 js-sys = { version = "0.3", optional = true }
 
 [build-dependencies]
-vergen-gix = { version = "9.1.0", features = ["build", "cargo", "rustc"] }
+vergen-gix = { version = "10.0.0", features = ["build", "cargo", "rustc"] }
 
 [dev-dependencies]
 tempfile = "3.25.0"
