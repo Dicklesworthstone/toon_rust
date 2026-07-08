@@ -100,7 +100,7 @@ pub fn validate_no_blank_lines_in_range(
     Ok(())
 }
 
-fn is_data_row(content: &str, delimiter: char) -> bool {
+const fn is_data_row(content: &str, delimiter: char) -> bool {
     // Find first unquoted colon and delimiter to properly handle quoted strings
     let colon_pos = find_unquoted_char(content, COLON, 0);
     let delimiter_pos = find_unquoted_char(content, delimiter, 0);
