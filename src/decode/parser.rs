@@ -359,6 +359,6 @@ pub fn is_array_header_content(content: &str) -> bool {
 }
 
 #[must_use]
-pub fn is_key_value_content(content: &str) -> bool {
+pub const fn is_key_value_content(content: &str) -> bool {
     find_unquoted_char(content, COLON, 0).is_some()
 }

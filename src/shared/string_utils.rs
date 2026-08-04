@@ -65,7 +65,7 @@ pub fn unescape_string(value: &str) -> Result<String, String> {
 }
 
 #[must_use]
-pub fn find_closing_quote(content: &str, start: usize) -> Option<usize> {
+pub const fn find_closing_quote(content: &str, start: usize) -> Option<usize> {
     let bytes = content.as_bytes();
     // Guard against out-of-bounds start positions (prevents `start + 1` overflow
     // on pathological inputs and short-circuits when there is no content to scan).
@@ -87,7 +87,7 @@ pub fn find_closing_quote(content: &str, start: usize) -> Option<usize> {
 }
 
 #[must_use]
-pub fn find_unquoted_char(content: &str, target: char, start: usize) -> Option<usize> {
+pub const fn find_unquoted_char(content: &str, target: char, start: usize) -> Option<usize> {
     // Byte-level scanning is valid only for ASCII targets. All current callers pass
     // ASCII (colon, pipe, tab, comma) so this is a safe fast-path; non-ASCII targets
     // short-circuit to None rather than risk a false positive on a UTF-8 byte.
