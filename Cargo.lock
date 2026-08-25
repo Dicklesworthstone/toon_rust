@@ -158,9 +158,9 @@ dependencies = [
 
 [[package]]
 name = "asupersync"
-version = "0.4.4"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c53eee30b6bef44faeabf2ca88e98680e81e3527452bb811491161377de17a35"
+checksum = "be81588a09a28a312b09d4af71e8aa8c6736e1d670a69a42e6779e874fbad1bd"
 dependencies = [
  "aes-gcm",
  "asupersync-macros",
@@ -211,9 +211,9 @@ dependencies = [
 
 [[package]]
 name = "asupersync-macros"
-version = "0.4.4"
+version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8ff5aa29d22c53e0dc039c213364fbacc8e44a47fcc8086997b069d74b1bc7ed"
+checksum = "1a14f9f162d8418e4e347f4965f42f41ca970f8e81be496e04ab4f79c94818c8"
 dependencies = [
  "proc-macro2",
  "quote",
