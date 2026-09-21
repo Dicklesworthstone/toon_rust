@@ -43,3 +43,16 @@ claude-upgrade-progress.json
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Beads local DB/runtime (canonical issues.jsonl stays tracked)
+.beads/*.db
+.beads/*.db-*
+.beads/*.lock
+.beads/.br-*-*.lock
+.beads/.write.lock
+.beads/last-touched
+.beads/.br_history/
+.beads/.br_recovery/
+.beads/*-wal-cert
+.beads/*-wal-cert-head
+.beads/*.fsqlite-migration-state
