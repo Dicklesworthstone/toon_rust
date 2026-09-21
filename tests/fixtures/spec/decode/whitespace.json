@@ -32,10 +32,7 @@
       "name": "tolerates leading and trailing spaces in tabular row values",
       "input": "items[2]{id,name}:\n  1 , Alice \n  2 , Bob ",
       "expected": {
-        "items": [
-          { "id": 1, "name": "Alice" },
-          { "id": 2, "name": "Bob" }
-        ]
+        "items": [{ "id": 1, "name": "Alice" }, { "id": 2, "name": "Bob" }]
       },
       "specSection": "12",
       "note": "Values in tabular rows are trimmed"

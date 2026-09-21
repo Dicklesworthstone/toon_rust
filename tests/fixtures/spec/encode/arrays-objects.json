@@ -6,10 +6,7 @@
     {
       "name": "uses list format for objects with different fields",
       "input": {
-        "items": [
-          { "id": 1, "name": "First" },
-          { "id": 2, "name": "Second", "extra": true }
-        ]
+        "items": [{ "id": 1, "name": "First" }, { "id": 2, "name": "Second", "extra": true }]
       },
       "expected": "items[2]:\n  - id: 1\n    name: First\n  - id: 2\n    name: Second\n    extra: true",
       "specSection": "9.4"
@@ -17,9 +14,7 @@
     {
       "name": "uses list format for objects with nested values",
       "input": {
-        "items": [
-          { "id": 1, "nested": { "x": 1 } }
-        ]
+        "items": [{ "id": 1, "nested": { "x": 1 } }]
       },
       "expected": "items[1]:\n  - id: 1\n    nested:\n      x: 1",
       "specSection": "9.4"
@@ -43,9 +38,7 @@
     {
       "name": "uses list format for objects containing arrays of arrays",
       "input": {
-        "items": [
-          { "matrix": [[1, 2], [3, 4]], "name": "grid" }
-        ]
+        "items": [{ "matrix": [[1, 2], [3, 4]], "name": "grid" }]
       },
       "expected": "items[1]:\n  - matrix[2]:\n      - [2]: 1,2\n      - [2]: 3,4\n    name: grid",
       "specSection": "10"
@@ -64,9 +57,7 @@
     {
       "name": "uses list format for nested object arrays with mismatched keys",
       "input": {
-        "items": [
-          { "users": [{ "id": 1, "name": "Ada" }, { "id": 2 }], "status": "active" }
-        ]
+        "items": [{ "users": [{ "id": 1, "name": "Ada" }, { "id": 2 }], "status": "active" }]
       },
       "expected": "items[1]:\n  - users[2]:\n      - id: 1\n        name: Ada\n      - id: 2\n    status: active",
       "specSection": "10"
@@ -90,9 +81,7 @@
     {
       "name": "encodes objects with empty arrays in list format",
       "input": {
-        "items": [
-          { "name": "Ada", "data": [] }
-        ]
+        "items": [{ "name": "Ada", "data": [] }]
       },
       "expected": "items[1]:\n  - name: Ada\n    data[0]:",
       "specSection": "10"
@@ -135,10 +124,7 @@
     {
       "name": "uses field order from first object for tabular headers",
       "input": {
-        "items": [
-          { "a": 1, "b": 2, "c": 3 },
-          { "c": 30, "b": 20, "a": 10 }
-        ]
+        "items": [{ "a": 1, "b": 2, "c": 3 }, { "c": 30, "b": 20, "a": 10 }]
       },
       "expected": "items[2]{a,b,c}:\n  1,2,3\n  10,20,30",
       "specSection": "9.3"
@@ -146,10 +132,7 @@
     {
       "name": "uses list format when one object has nested field",
       "input": {
-        "items": [
-          { "id": 1, "data": "string" },
-          { "id": 2, "data": { "nested": true } }
-        ]
+        "items": [{ "id": 1, "data": "string" }, { "id": 2, "data": { "nested": true } }]
       },
       "expected": "items[2]:\n  - id: 1\n    data: string\n  - id: 2\n    data:\n      nested: true",
       "specSection": "9.4"

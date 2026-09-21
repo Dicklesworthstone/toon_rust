@@ -169,10 +169,7 @@
     {
       "name": "quotes tabular values containing comma delimiter",
       "input": {
-        "items": [
-          { "id": 1, "note": "a,b" },
-          { "id": 2, "note": "c,d" }
-        ]
+        "items": [{ "id": 1, "note": "a,b" }, { "id": 2, "note": "c,d" }]
       },
       "expected": "items[2]{id,note}:\n  1,\"a,b\"\n  2,\"c,d\"",
       "options": {
@@ -183,10 +180,7 @@
     {
       "name": "does not quote commas in tabular values with tab delimiter",
       "input": {
-        "items": [
-          { "id": 1, "note": "a,b" },
-          { "id": 2, "note": "c,d" }
-        ]
+        "items": [{ "id": 1, "note": "a,b" }, { "id": 2, "note": "c,d" }]
       },
       "expected": "items[2\t]{id\tnote}:\n  1\ta,b\n  2\tc,d",
       "options": {

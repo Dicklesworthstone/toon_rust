@@ -7,10 +7,7 @@
       "name": "parses list arrays for non-uniform objects",
       "input": "items[2]:\n  - id: 1\n    name: First\n  - id: 2\n    name: Second\n    extra: true",
       "expected": {
-        "items": [
-          { "id": 1, "name": "First" },
-          { "id": 2, "name": "Second", "extra": true }
-        ]
+        "items": [{ "id": 1, "name": "First" }, { "id": 2, "name": "Second", "extra": true }]
       },
       "specSection": "9.4"
     },
@@ -45,9 +42,7 @@
       "name": "parses list arrays containing objects with nested properties",
       "input": "items[1]:\n  - id: 1\n    nested:\n      x: 1",
       "expected": {
-        "items": [
-          { "id": 1, "nested": { "x": 1 } }
-        ]
+        "items": [{ "id": 1, "nested": { "x": 1 } }]
       },
       "specSection": "9.4"
     },
@@ -57,10 +52,7 @@
       "expected": {
         "items": [
           {
-            "users": [
-              { "id": 1, "name": "Ada" },
-              { "id": 2, "name": "Bob" }
-            ],
+            "users": [{ "id": 1, "name": "Ada" }, { "id": 2, "name": "Bob" }],
             "status": "active"
           }
         ]
@@ -74,10 +66,7 @@
       "expected": {
         "items": [
           {
-            "users": [
-              { "id": 1, "name": "Ada" },
-              { "id": 2, "name": "Bob" }
-            ]
+            "users": [{ "id": 1, "name": "Ada" }, { "id": 2, "name": "Bob" }]
           }
         ]
       },
@@ -88,9 +77,7 @@
       "name": "parses objects containing arrays (including empty arrays) in list format",
       "input": "items[1]:\n  - name: Ada\n    data[0]:",
       "expected": {
-        "items": [
-          { "name": "Ada", "data": [] }
-        ]
+        "items": [{ "name": "Ada", "data": [] }]
       },
       "specSection": "9.4"
     },
@@ -98,9 +85,7 @@
       "name": "parses arrays of arrays within objects",
       "input": "items[1]:\n  - matrix[2]:\n      - [2]: 1,2\n      - [2]: 3,4\n    name: grid",
       "expected": {
-        "items": [
-          { "matrix": [[1, 2], [3, 4]], "name": "grid" }
-        ]
+        "items": [{ "matrix": [[1, 2], [3, 4]], "name": "grid" }]
       },
       "specSection": "9.2"
     },
@@ -206,10 +191,7 @@
       "name": "parses quoted key with list array format",
       "input": "\"x-items\"[2]:\n  - id: 1\n  - id: 2",
       "expected": {
-        "x-items": [
-          { "id": 1 },
-          { "id": 2 }
-        ]
+        "x-items": [{ "id": 1 }, { "id": 2 }]
       },
       "specSection": "9.4"
     }

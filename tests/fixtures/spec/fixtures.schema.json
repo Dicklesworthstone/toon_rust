@@ -35,10 +35,7 @@
             "type": "string",
             "description": "Descriptive test name explaining what is being validated",
             "minLength": 1,
-            "examples": [
-              "encodes safe strings without quotes",
-              "throws on array length mismatch"
-            ]
+            "examples": ["encodes safe strings without quotes", "throws on array length mismatch"]
           },
           "input": {
             "description": "Input value - JSON value for encode tests, TOON string for decode tests"

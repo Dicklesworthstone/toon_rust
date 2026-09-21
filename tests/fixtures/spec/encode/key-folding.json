@@ -38,10 +38,7 @@
       "input": {
         "a": {
           "b": {
-            "items": [
-              { "id": 1, "name": "A" },
-              { "id": 2, "name": "B" }
-            ]
+            "items": [{ "id": 1, "name": "A" }, { "id": 2, "name": "B" }]
           }
         }
       },
