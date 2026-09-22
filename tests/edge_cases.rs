@@ -579,6 +579,203 @@ fn unquoted_key_with_bracketed_quoted_value_is_key_value() {
 }
 
 // ============================================================================
+// THE DECODER NEVER DROPS INPUT SILENTLY (spec v4 §14 checklist)
+// ============================================================================
+
+fn decode_lenient(input: &str) -> serde_json::Value {
+    try_decode(
+        input,
+        Some(DecodeOptions {
+            indent: None,
+            strict: Some(false),
+            expand_paths: None,
+        }),
+    )
+    .unwrap_or_else(|e| panic!("lenient decode of {input:?} failed: {e}"))
+    .into()
+}
+
+fn decode_ok(input: &str) -> serde_json::Value {
+    try_decode(input, None)
+        .unwrap_or_else(|e| panic!("decode of {input:?} failed: {e}"))
+        .into()
+}
+
+#[test]
+fn over_indented_line_is_an_error_or_a_field_never_dropped() {
+    let doc = "a:\n  b: 1\n    c: 2\n  d: 3\ne: 4";
+    assert_eq!(
+        decode_strict_err(doc),
+        "Validation error at line 3: Over-indented line: expected depth 1, but found 2"
+    );
+    assert_eq!(
+        decode_lenient(doc),
+        serde_json::json!({ "a": { "b": 1.0, "c": 2.0, "d": 3.0 }, "e": 4.0 })
+    );
+    assert_eq!(
+        decode_strict_err("a: 1\n  b: 2"),
+        "Validation error at line 2: Over-indented line: expected depth 0, but found 1"
+    );
+}
+
+#[test]
+fn indentation_depth_jump_is_an_error() {
+    assert_eq!(
+        decode_strict_err("a:\n    b: 1"),
+        "Validation error at line 2: Indentation depth jump: expected depth 1, but found 2"
+    );
+}
+
+#[test]
+fn content_after_a_root_array_is_an_error() {
+    assert_eq!(
+        decode_strict_err("[2]: a,b\nc: 1"),
+        "Validation error at line 2: Unexpected content after the document root"
+    );
+}
+
+#[test]
+fn lenient_declared_length_never_truncates() {
+    assert_eq!(
+        decode_lenient("l[1]:\n  - a\n  - b\nz: 1"),
+        serde_json::json!({ "l": ["a", "b"], "z": 1.0 })
+    );
+    assert_eq!(
+        decode_lenient("t[1]{x}:\n  1\n  2\nz: 1"),
+        serde_json::json!({ "t": [{ "x": 1.0 }, { "x": 2.0 }], "z": 1.0 })
+    );
+}
+
+#[test]
+fn surplus_bare_dash_item_is_reported() {
+    assert_eq!(
+        decode_strict_err("l[1]:\n  - a\n  -"),
+        "Expected 1 list array items, but found more"
+    );
+}
+
+#[test]
+fn repeated_keys_error_in_strict_and_last_write_wins_in_lenient() {
+    assert_eq!(
+        decode_strict_err("a: 1\na: 2"),
+        "Duplicate sibling key \"a\""
+    );
+    assert_eq!(
+        decode_lenient("a: 1\nb: 2\na: 3"),
+        serde_json::json!({ "a": 3.0, "b": 2.0 })
+    );
+    assert_eq!(
+        decode_strict_err("t[1]{a,a}:\n  1,2"),
+        "Duplicate sibling key \"a\""
+    );
+}
+
+#[test]
+fn malformed_headers_are_not_silently_accepted() {
+    // Text after `]` makes a key-value line whose key keeps that text.
+    assert_eq!(
+        decode_ok("items[2][3]: a,b"),
+        serde_json::json!({ "items[2][3]": "a,b" })
+    );
+    assert_eq!(
+        decode_ok("a[+2]: x,y"),
+        serde_json::json!({ "a[+2]": "x,y" })
+    );
+    assert_eq!(
+        decode_strict_err("t[2]{a,b}: 1,2"),
+        "Unexpected content after fields-bearing header colon"
+    );
+    assert_eq!(
+        decode_strict_err("t[1]{}:\n  1"),
+        "Empty field list in array header"
+    );
+    assert_eq!(
+        decode_strict_err("a[18446744073709551616]: 1"),
+        "Declared array length 18446744073709551616 exceeds maximum allowed (100000000)"
+    );
+}
+
+#[test]
+fn field_name_with_a_closing_brace_round_trips() {
+    let json = serde_json::json!([{ "a}b": 1.0, "c": 2.0 }, { "a}b": 3.0, "c": 4.0 }]);
+    let toon = encode(json.clone(), None);
+    assert_eq!(decode_ok(&toon), json);
+}
+
+#[test]
+fn crlf_bare_dash_item_and_indented_quoted_key() {
+    assert_eq!(
+        decode_ok("l[2]:\r\n  - a\r\n  -\r\n"),
+        serde_json::json!({ "l": ["a", {}] })
+    );
+    assert_eq!(
+        decode_lenient("\t\"a\": 1"),
+        serde_json::json!({ "a": 1.0 })
+    );
+}
+
+// ============================================================================
+// SAFE KEY FOLDING
+// ============================================================================
+
+fn fold_safe() -> EncodeOptions {
+    EncodeOptions {
+        indent: None,
+        delimiter: None,
+        key_folding: Some(KeyFoldingMode::Safe),
+        flatten_depth: None,
+        replacer: None,
+    }
+}
+
+const fn expand_safe() -> DecodeOptions {
+    DecodeOptions {
+        indent: None,
+        strict: Some(true),
+        expand_paths: Some(ExpandPathsMode::Safe),
+    }
+}
+
+/// A fold never produces a key equal to a literal sibling (spec §13.4 rule 3), in a list-item
+/// object too: the first field used to be missing from the siblings, so the encoder wrote
+/// `- c.d: 7` and `c.d: 1` in one object, which the strict decoder rejects.
+#[test]
+fn fold_never_duplicates_a_list_item_first_key() {
+    let json = serde_json::json!([{ "c.d": 7, "c": { "d": 1 } }]);
+    let toon = encode(json, Some(fold_safe()));
+    assert_eq!(toon, "[1]:\n  - c.d: 7\n    c:\n      d: 1");
+    assert!(try_decode(&toon, None).is_ok(), "{toon:?} must decode");
+}
+
+/// Without literal dotted keys, safe folding round-trips through safe expansion.
+#[test]
+fn safe_folding_round_trips_through_safe_expansion() {
+    for json in [
+        serde_json::json!({ "x": { "y": { "z": 1.0 } } }),
+        serde_json::json!({ "a": { "b": [1.0, 2.0] }, "c": { "d": { "e": {} } } }),
+        serde_json::json!([{ "p": { "q": { "r": "s" } }, "t": 1.0 }]),
+    ] {
+        let toon = encode(json.clone(), Some(fold_safe()));
+        let decoded: serde_json::Value = try_decode(&toon, Some(expand_safe()))
+            .unwrap_or_else(|e| panic!("decode of {toon:?} failed: {e}"))
+            .into();
+        assert_eq!(decoded, json, "round trip of {toon:?}");
+    }
+}
+
+#[test]
+fn strings_that_only_start_like_numbers_stay_bare() {
+    let toon = encode(
+        serde_json::json!({ "a": "007abc", "b": "00:", "c": "007", "d": "-05", "e": "1e309" }),
+        None,
+    );
+    assert_eq!(
+        toon,
+        "a: 007abc\nb: \"00:\"\nc: \"007\"\nd: \"-05\"\ne: \"1e309\""
+    );
+}
+
+// ============================================================================
 // PROPERTY-BASED TESTS
 // ============================================================================
 

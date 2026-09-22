@@ -44,10 +44,34 @@ fn encode_object_lines(
 ) {
     // Collect keys as references to avoid cloning
     let keys: Vec<&str> = value.iter().map(|(key, _)| key.as_str()).collect();
+    encode_fields_lines(
+        value,
+        &keys,
+        depth,
+        options,
+        root_literal_keys,
+        path_prefix,
+        remaining_depth,
+        out,
+    );
+}
 
+/// Encode `fields`, which belong to an object whose keys are `siblings` (a superset of the
+/// fields' own keys when the first field of a list item was written on the hyphen line).
+#[allow(clippy::too_many_arguments)]
+fn encode_fields_lines(
+    value: &[(String, JsonValue)],
+    keys: &[&str],
+    depth: usize,
+    options: &ResolvedEncodeOptions,
+    root_literal_keys: Option<&HashSet<String>>,
+    path_prefix: Option<&str>,
+    remaining_depth: Option<usize>,
+    out: &mut Vec<String>,
+) {
     let mut root_literal_set = HashSet::new();
     let root_literal_keys = if depth == 0 && root_literal_keys.is_none() {
-        for key in &keys {
+        for key in keys {
             if key.contains(DOT) {
                 root_literal_set.insert((*key).to_string());
             }
@@ -65,7 +89,7 @@ fn encode_object_lines(
             val,
             depth,
             options,
-            &keys,
+            keys,
             root_literal_keys,
             path_prefix,
             effective_flatten_depth,
@@ -113,7 +137,7 @@ fn encode_key_value_pair_lines(
                     return;
                 }
                 JsonValue::Array(items) => {
-                    encode_array_lines(Some(&folded.folded_key), &items, depth, options, out);
+                    encode_array_lines(Some(&encoded_key), &items, depth, options, out);
                     return;
                 }
                 JsonValue::Object(entries) => {
@@ -131,7 +155,7 @@ fn encode_key_value_pair_lines(
             let folded_path = if let Some(prefix) = path_prefix {
                 format!("{prefix}{DOT}{}", folded.folded_key)
             } else {
-                folded.folded_key.clone()
+                folded.folded_key
             };
             encode_object_lines(
                 &entries,
@@ -159,7 +183,7 @@ fn encode_key_value_pair_lines(
             ));
         }
         JsonValue::Array(items) => {
-            encode_array_lines(Some(key), items, depth, options, out);
+            encode_array_lines(Some(&encoded_key), items, depth, options, out);
         }
         JsonValue::Object(entries) => {
             out.push(indented_key_colon_line(depth, &encoded_key, options.indent));
@@ -267,9 +291,14 @@ fn encode_array_of_objects_as_tabular_lines(
     options: &ResolvedEncodeOptions,
     out: &mut Vec<String>,
 ) {
-    let formatted_header = format_header(rows.len(), key, Some(header), options.delimiter);
+    let fields = encode_field_names(header);
+    let formatted_header = format_header(rows.len(), key, Some(&fields), options.delimiter);
     out.push(indented_line(depth, &formatted_header, options.indent));
     write_tabular_rows_lines(rows, header, depth + 1, options, out);
+}
+
+fn encode_field_names(header: &[String]) -> Vec<String> {
+    header.iter().map(|field| encode_key(field)).collect()
 }
 
 fn write_tabular_rows_lines(
@@ -366,32 +395,29 @@ fn encode_object_as_list_item_lines(
     }
 
     let first = obj[0].clone();
-    let rest = if obj.len() > 1 {
-        obj[1..].to_vec()
-    } else {
-        Vec::new()
-    };
+    let rest = &obj[1..];
     let (first_key, first_value) = first;
+    let encoded_key = encode_key(&first_key);
+    // The remaining fields fold against ALL keys of the object: without the first key, a fold of
+    // `c: {d: 1}` produced `c.d` beside a literal first field `c.d` (a duplicate key).
+    let all_keys: Vec<&str> = obj.iter().map(|(key, _)| key.as_str()).collect();
 
     if let JsonValue::Array(items) = &first_value
         && is_array_of_objects(items)
         && let Some(header) = extract_tabular_header(items)
     {
+        let fields = encode_field_names(&header);
         let formatted = format_header(
             items.len(),
-            Some(&first_key),
-            Some(&header),
+            Some(&encoded_key),
+            Some(&fields),
             options.delimiter,
         );
         out.push(indented_list_item(depth, &formatted, options.indent));
         write_tabular_rows_lines(items, &header, depth + 2, options, out);
-        if !rest.is_empty() {
-            encode_object_lines(&rest, depth + 1, options, None, None, None, out);
-        }
+        encode_fields_lines(rest, &all_keys, depth + 1, options, None, None, None, out);
         return;
     }
-
-    let encoded_key = encode_key(&first_key);
 
     match first_value {
         JsonValue::Primitive(primitive) => {
@@ -445,9 +471,7 @@ fn encode_object_as_list_item_lines(
         }
     }
 
-    if !rest.is_empty() {
-        encode_object_lines(&rest, depth + 1, options, None, None, None, out);
-    }
+    encode_fields_lines(rest, &all_keys, depth + 1, options, None, None, None, out);
 }
 
 fn encode_list_item_value_lines(

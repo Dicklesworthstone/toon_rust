@@ -15,15 +15,12 @@ pub fn is_numeric_like(value: &str) -> bool {
     let bytes = trimmed.as_bytes();
     let mut i = 0usize;
 
-    let digit_start = if bytes[0] == b'-' {
+    if bytes[0] == b'-' {
         i += 1;
         if i >= bytes.len() {
             return false;
         }
-        1
-    } else {
-        0
-    };
+    }
 
     let mut digit_count = 0usize;
     while i < bytes.len() && bytes[i].is_ascii_digit() {
@@ -35,10 +32,10 @@ pub fn is_numeric_like(value: &str) -> bool {
         return false;
     }
 
-    // Leading zero checks for integer-like values (works for both positive and negative).
-    if digit_count > 1 && bytes[digit_start] == b'0' {
-        return true;
-    }
+    // Leading zeros need no shortcut: the rest of the scan accepts them (`007`, `-05`, `007.5`
+    // match spec §7.2's /^-?\d+(\.\d+)?(e[+-]?\d+)?$/i). A shortcut here used to quote any
+    // string that merely STARTS with `0` and a digit (`007abc`, `00:`), which no reader takes
+    // for a number.
 
     let mut saw_dot = false;
     if i < bytes.len() && bytes[i] == b'.' {

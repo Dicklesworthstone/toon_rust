@@ -48,6 +48,7 @@ pub fn encode_and_join_primitives(values: &[JsonPrimitive], delimiter: char) -> 
     out
 }
 
+/// Format an array header from an already encoded key and field names.
 #[must_use]
 pub fn format_header(
     length: usize,
@@ -58,7 +59,7 @@ pub fn format_header(
     let mut header = String::new();
 
     if let Some(key) = key {
-        header.push_str(&encode_key(key));
+        header.push_str(key);
     }
 
     if delimiter == DEFAULT_DELIMITER {
@@ -73,7 +74,7 @@ pub fn format_header(
             if idx > 0 {
                 header.push(delimiter);
             }
-            header.push_str(&encode_key(field));
+            header.push_str(field);
         }
         header.push('}');
     }
@@ -147,8 +148,9 @@ fn format_number(value: f64) -> String {
 
 /// JSON number text as JavaScript's `JSON.stringify` writes it.
 ///
-/// That is ECMA-262 `Number::toString`: integers without a fraction (`1`, not `1.0`), plain decimals for `1e-7 < |x| < 1e21`, and
-/// `1e+21` / `1.5e-7` outside that range. Non-finite values are `null`.
+/// That is ECMA-262 `Number::toString`: integers without a fraction (`1`, not `1.0`), plain
+/// decimals for `1e-7 < |x| < 1e21`, and `1e+21` / `1.5e-7` outside that range. Non-finite
+/// values are `null`.
 #[must_use]
 pub fn format_json_number(value: f64) -> String {
     if !value.is_finite() {
@@ -339,7 +341,7 @@ mod tests {
 
     #[test]
     fn format_header_with_quoted_field_name() {
-        let fields = vec!["weird name".to_string()];
+        let fields = vec![encode_key("weird name")];
         let out = format_header(1, Some("data"), Some(&fields), ',');
         assert!(out.contains("{\"weird name\"}"));
     }
