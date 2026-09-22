@@ -40,8 +40,8 @@ struct BuildState {
 
 /// Build a decoded node tree from a stream of events.
 ///
-/// Sibling keys are unique in the result (spec v4 §14.3): a repeated key is an error in strict
-/// mode, and in lenient mode the later value replaces the earlier one in place.
+/// Sibling keys are unique in the result: a repeated key is resolved by the deep-merge rule of
+/// path expansion (two objects merge; otherwise a strict-mode error, or last write wins).
 ///
 /// # Errors
 ///
@@ -159,13 +159,10 @@ fn attach(state: &mut BuildState, node: NodeValue, missing_key: &str) -> Result<
             };
             if let Some(&position) = index.get(&key) {
                 // A repeated sibling key: plain `--decode` used to write both, a JSON text with
-                // duplicate member names, while `--expand-paths safe` rejected the same document.
-                if strict {
-                    return Err(ToonError::message(format!(
-                        "Duplicate sibling key \"{key}\""
-                    )));
-                }
-                entries[position].1 = node;
+                // duplicate member names, while `--expand-paths safe` merged or rejected the same
+                // document. Both modes now follow the expansion rule (spec §13.4).
+                let existing = std::mem::replace(&mut entries[position].1, placeholder());
+                entries[position].1 = merge_duplicate(&key, existing, node, strict)?;
             } else {
                 index.insert(key.clone(), entries.len());
                 entries.push((key.clone(), node));
@@ -176,6 +173,49 @@ fn attach(state: &mut BuildState, node: NodeValue, missing_key: &str) -> Result<
             } else {
                 quoted_keys.remove(&key);
             }
+        }
+    }
+    Ok(())
+}
+
+const fn placeholder() -> NodeValue {
+    NodeValue::Primitive(crate::StringOrNumberOrBoolOrNull::Null)
+}
+
+/// Resolve a key that appears twice in one object, by the deep-merge rule of path expansion
+/// (spec §13.4): two objects merge recursively; any other pair is an error in strict mode, and
+/// in lenient mode the later value wins (in the earlier one's position).
+fn merge_duplicate(
+    key: &str,
+    existing: NodeValue,
+    later: NodeValue,
+    strict: bool,
+) -> Result<NodeValue> {
+    match (existing, later) {
+        (NodeValue::Object(mut target), NodeValue::Object(source)) => {
+            merge_object_into(&mut target, source, strict)?;
+            Ok(NodeValue::Object(target))
+        }
+        (_, later) if !strict => Ok(later),
+        _ => Err(ToonError::message(format!(
+            "Duplicate sibling key \"{key}\""
+        ))),
+    }
+}
+
+fn merge_object_into(target: &mut ObjectNode, source: ObjectNode, strict: bool) -> Result<()> {
+    for (key, value) in source.entries {
+        let was_quoted = source.quoted_keys.contains(&key);
+        if let Some(position) = target.entries.iter().position(|(k, _)| *k == key) {
+            let existing = std::mem::replace(&mut target.entries[position].1, placeholder());
+            target.entries[position].1 = merge_duplicate(&key, existing, value, strict)?;
+        } else {
+            target.entries.push((key.clone(), value));
+        }
+        if was_quoted {
+            target.quoted_keys.insert(key);
+        } else {
+            target.quoted_keys.remove(&key);
         }
     }
     Ok(())
@@ -217,6 +257,27 @@ mod tests {
         let events = object_with(vec![key("a"), prim_num(1.0), key("a"), prim_num(2.0)]);
         let err = build_node_from_events(events).unwrap_err();
         assert_eq!(err.to_string(), "Duplicate sibling key \"a\"");
+    }
+
+    #[test]
+    fn repeated_object_keys_merge_deeply_in_both_modes() {
+        let events = object_with(vec![
+            key("a"),
+            JsonStreamEvent::StartObject,
+            key("x"),
+            prim_num(1.0),
+            JsonStreamEvent::EndObject,
+            key("a"),
+            JsonStreamEvent::StartObject,
+            key("y"),
+            prim_num(2.0),
+            JsonStreamEvent::EndObject,
+        ]);
+        for strict in [true, false] {
+            let root = super::build_node_from_events(events.clone(), strict).unwrap();
+            let json: serde_json::Value = node_to_json(root).into();
+            assert_eq!(json, serde_json::json!({ "a": { "x": 1.0, "y": 2.0 } }));
+        }
     }
 
     #[test]

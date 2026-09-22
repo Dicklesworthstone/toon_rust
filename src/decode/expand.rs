@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::decode::decoders::MAX_NESTING_DEPTH;
 use crate::decode::event_builder::{NodeValue, ObjectNode};
 use crate::error::{Result, ToonError};
 use crate::shared::constants::DOT;
@@ -23,7 +24,32 @@ fn depth_error() -> ToonError {
 /// Returns an error in strict mode when path expansion encounters a conflict,
 /// or when recursion depth exceeds the hard limit.
 pub fn expand_paths_safe(value: NodeValue, strict: bool) -> Result<NodeValue> {
-    expand_paths_safe_inner(value, strict, 0)
+    let expanded = expand_paths_safe_inner(value, strict, 0)?;
+    // Expansion turns each dotted segment into a nested object, so it can nest deeper than the
+    // document did. The result stays within the limit the decoder and the JSON reader share,
+    // so toon never writes JSON it cannot read back.
+    if nesting_depth(&expanded) > MAX_NESTING_DEPTH {
+        return Err(ToonError::message(format!(
+            "Nesting depth exceeds {MAX_NESTING_DEPTH} levels after path expansion"
+        )));
+    }
+    Ok(expanded)
+}
+
+/// The number of nested objects and arrays, the outermost included (0 for a primitive).
+fn nesting_depth(value: &NodeValue) -> usize {
+    match value {
+        NodeValue::Primitive(_) => 0,
+        NodeValue::Array(items) => 1 + items.iter().map(nesting_depth).max().unwrap_or(0),
+        NodeValue::Object(obj) => {
+            1 + obj
+                .entries
+                .iter()
+                .map(|(_, value)| nesting_depth(value))
+                .max()
+                .unwrap_or(0)
+        }
+    }
 }
 
 fn expand_paths_safe_inner(value: NodeValue, strict: bool, depth: usize) -> Result<NodeValue> {

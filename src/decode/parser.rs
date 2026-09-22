@@ -77,6 +77,13 @@ pub fn parse_array_header_line(
         // The fields segment ends at the first `}` outside quotes: a quoted field name may hold a
         // brace (`{"a}b",c}`), which the encoder writes raw inside the quotes.
         let Some(brace_close) = find_unquoted_char(content, CLOSE_BRACE, segment_start) else {
+            // A quote opened in the field list and never closed swallowed the `}`: that is the
+            // error to report, not a key-value line without its colon.
+            if ends_inside_quotes(&content[segment_start..]) {
+                return Err(ToonError::message(
+                    "Unterminated string: missing closing quote",
+                ));
+            }
             return Ok(None);
         };
         fields_range = Some((segment_start + 1, brace_close));
@@ -205,6 +212,21 @@ fn parse_field_names(fields_content: &str, delimiter: char) -> Result<Vec<FieldN
             Ok(FieldName { name, was_quoted })
         })
         .collect()
+}
+
+/// Whether a left-to-right scan of `text` (backslash escapes honoured inside quotes) ends
+/// inside a quoted string.
+fn ends_inside_quotes(text: &str) -> bool {
+    let mut in_quotes = false;
+    let mut bytes = text.bytes();
+    while let Some(b) = bytes.next() {
+        if in_quotes && b == BACKSLASH as u8 {
+            bytes.next();
+        } else if b == DOUBLE_QUOTE as u8 {
+            in_quotes = !in_quotes;
+        }
+    }
+    in_quotes
 }
 
 /// The first index at or after `from` that is not ASCII whitespace.
