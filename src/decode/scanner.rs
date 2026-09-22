@@ -48,6 +48,10 @@ pub fn parse_line_incremental(
     state.line_number += 1;
     let line_number = state.line_number;
 
+    // CRLF input: the CR belongs to the line ending, not to the content. Without this a bare
+    // list item arrived as `-\r` and was not recognised, while other constructs trimmed it.
+    let raw = raw.strip_suffix('\r').unwrap_or(raw);
+
     let mut indent = 0usize;
     let raw_bytes = raw.as_bytes();
     while indent < raw_bytes.len() && raw_bytes[indent] == SPACE as u8 {

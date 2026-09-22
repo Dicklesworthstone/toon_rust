@@ -67,24 +67,27 @@ pub fn parse_array_header_line(
     };
     let bracket_end = bracket_start + bracket_end;
 
-    let mut brace_end = bracket_end + 1;
-    let brace_start = content[bracket_end + 1..]
-        .find(OPEN_BRACE)
-        .map(|idx| bracket_end + 1 + idx);
-    let colon_after_bracket = content[bracket_end + 1..]
-        .find(COLON)
-        .map(|idx| bracket_end + 1 + idx);
-
-    if let (Some(brace_start), Some(colon_after_bracket)) = (brace_start, colon_after_bracket)
-        && brace_start < colon_after_bracket
-        && let Some(found_end) = content[brace_start..].find(CLOSE_BRACE)
-    {
-        let found_end = brace_start + found_end;
-        brace_end = found_end + 1;
-    }
-
-    let colon_index = content[brace_end..].find(COLON).map(|idx| brace_end + idx);
-    let Some(colon_index) = colon_index else {
+    // After `]` only whitespace may precede the fields segment `{…}` or the colon. Any other
+    // text (`items[2][3]: a,b`, `a[1]extra: x`) means the line is not an array header (spec §6,
+    // v3.0.3); it is decoded as a key-value line whose key is everything before the colon,
+    // instead of the text being silently dropped.
+    let segment_start = skip_whitespace(content, bracket_end + 1);
+    let mut fields_range: Option<(usize, usize)> = None;
+    let colon_index = if content[segment_start..].starts_with(OPEN_BRACE) {
+        // The fields segment ends at the first `}` outside quotes: a quoted field name may hold a
+        // brace (`{"a}b",c}`), which the encoder writes raw inside the quotes.
+        let Some(brace_close) = find_unquoted_char(content, CLOSE_BRACE, segment_start) else {
+            return Ok(None);
+        };
+        fields_range = Some((segment_start + 1, brace_close));
+        let colon = skip_whitespace(content, brace_close + 1);
+        if !content[colon..].starts_with(COLON) {
+            return Ok(None);
+        }
+        colon
+    } else if content[segment_start..].starts_with(COLON) {
+        segment_start
+    } else {
         return Ok(None);
     };
 
@@ -109,32 +112,26 @@ pub fn parse_array_header_line(
 
     // Enforce the declared-length cap only once we know this line is a real
     // array header (bracket parsed cleanly); surface a hard error instead of
-    // silently falling back to key-value handling.
+    // silently falling back to key-value handling. A length too large for the
+    // platform word is over the cap too, not a reason to read the line as a key.
     if length > MAX_DECLARED_ARRAY_LENGTH {
+        let digits = bracket_content.trim_end_matches([TAB, PIPE]);
         return Err(ToonError::message(format!(
-            "Declared array length {length} exceeds maximum allowed ({MAX_DECLARED_ARRAY_LENGTH})"
+            "Declared array length {digits} exceeds maximum allowed ({MAX_DECLARED_ARRAY_LENGTH})"
         )));
     }
 
-    let mut fields: Option<Vec<FieldName>> = None;
-    if let Some(brace_start) = brace_start
-        && brace_start < colon_index
-        && let Some(found_end) = content[brace_start..].find(CLOSE_BRACE)
-    {
-        let found_end = brace_start + found_end;
-        if found_end < colon_index {
-            let fields_content = &content[brace_start + 1..found_end];
-            let parsed_fields = parse_delimited_values(fields_content, delimiter)
-                .into_iter()
-                .map(|field| {
-                    let trimmed = field.trim();
-                    let was_quoted = trimmed.starts_with(DOUBLE_QUOTE);
-                    let name = parse_string_literal(trimmed)?;
-                    Ok(FieldName { name, was_quoted })
-                })
-                .collect::<Result<Vec<_>>>()?;
-            fields = Some(parsed_fields);
-        }
+    let fields = match fields_range {
+        Some((start, end)) => Some(parse_field_names(&content[start..end], delimiter)?),
+        None => None,
+    };
+
+    // A fields-bearing header announces rows on the following lines; values after its colon
+    // used to be decoded as a primitive array with the field names ignored.
+    if fields.is_some() && !after_colon.is_empty() {
+        return Err(ToonError::message(
+            "Unexpected content after fields-bearing header colon",
+        ));
     }
 
     Ok(Some(ArrayHeaderParseResult {
@@ -170,22 +167,51 @@ pub const MAX_DECLARED_ARRAY_LENGTH: usize = 100_000_000;
 ///
 /// Returns an error if the length is not a valid unsigned integer.
 pub fn parse_bracket_segment(seg: &str, default_delimiter: char) -> Result<(usize, char)> {
-    let mut content = seg.to_string();
-    let mut delimiter = default_delimiter;
+    let (digits, delimiter) = match seg.chars().last() {
+        Some(last @ (TAB | PIPE)) => (&seg[..seg.len() - 1], last),
+        _ => (seg, default_delimiter),
+    };
 
-    if content.ends_with(TAB) {
-        delimiter = TAB;
-        content.pop();
-    } else if content.ends_with(PIPE) {
-        delimiter = PIPE;
-        content.pop();
+    // The length is `1*DIGIT` (spec §6): no sign, no spaces. Rust's integer parser also took
+    // `+2`. A value beyond the platform word saturates, so the caller's cap rejects it.
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(ToonError::message(format!("Invalid array length: {seg}")));
     }
-
-    let length = content
-        .parse::<usize>()
-        .map_err(|_| ToonError::message(format!("Invalid array length: {seg}")))?;
+    let length = digits.bytes().fold(0usize, |acc, b| {
+        acc.saturating_mul(10).saturating_add(usize::from(b - b'0'))
+    });
 
     Ok((length, delimiter))
+}
+
+/// Parse the names of a fields segment (the text between `{` and `}`).
+///
+/// # Errors
+///
+/// Returns an error for an empty list, an empty name, or a malformed quoted name.
+fn parse_field_names(fields_content: &str, delimiter: char) -> Result<Vec<FieldName>> {
+    if fields_content.trim().is_empty() {
+        return Err(ToonError::message("Empty field list in array header"));
+    }
+    parse_delimited_values(fields_content, delimiter)
+        .into_iter()
+        .map(|field| {
+            let trimmed = field.trim();
+            if trimmed.is_empty() {
+                return Err(ToonError::message("Empty field name in field list"));
+            }
+            let was_quoted = trimmed.starts_with(DOUBLE_QUOTE);
+            let name = parse_string_literal(trimmed)?;
+            Ok(FieldName { name, was_quoted })
+        })
+        .collect()
+}
+
+/// The first index at or after `from` that is not ASCII whitespace.
+fn skip_whitespace(content: &str, from: usize) -> usize {
+    content[from..]
+        .find(|c: char| !c.is_ascii_whitespace())
+        .map_or(content.len(), |idx| from + idx)
 }
 
 #[must_use]
@@ -348,6 +374,9 @@ pub fn parse_quoted_key(content: &str, start: usize) -> Result<(String, usize)> 
 ///
 /// Returns an error if the key is malformed or missing a trailing colon.
 pub fn parse_key_token(content: &str, start: usize) -> Result<(String, usize, bool)> {
+    // Decide "quoted" after the leading whitespace, as every other test does: `  "a": 1`
+    // used to keep the quotes as part of an unquoted key.
+    let start = skip_whitespace(content, start);
     let is_quoted = content.as_bytes().get(start).map(|b| *b as char) == Some(DOUBLE_QUOTE);
     let (key, end) = if is_quoted {
         parse_quoted_key(content, start)?

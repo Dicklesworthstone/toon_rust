@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::error::{Result, ToonError};
 use crate::{JsonPrimitive, JsonStreamEvent, JsonValue};
@@ -20,7 +20,10 @@ pub struct ObjectNode {
 enum BuildContext {
     Object {
         entries: Vec<(String, NodeValue)>,
-        current_key: Option<String>,
+        /// Position of each key in `entries`, to find a repeated key without a scan.
+        index: HashMap<String, usize>,
+        /// The pending key and whether it was quoted in the source.
+        current_key: Option<(String, bool)>,
         quoted_keys: HashSet<String>,
     },
     Array {
@@ -32,20 +35,26 @@ enum BuildContext {
 struct BuildState {
     stack: Vec<BuildContext>,
     root: Option<NodeValue>,
+    strict: bool,
 }
 
 /// Build a decoded node tree from a stream of events.
 ///
+/// Sibling keys are unique in the result (spec v4 §14.3): a repeated key is an error in strict
+/// mode, and in lenient mode the later value replaces the earlier one in place.
+///
 /// # Errors
 ///
 /// Returns an error if the event stream is malformed (mismatched start/end
-/// events, missing keys, or incomplete stacks).
+/// events, missing keys, or incomplete stacks), or in strict mode for a repeated key.
 pub fn build_node_from_events(
     events: impl IntoIterator<Item = JsonStreamEvent>,
+    strict: bool,
 ) -> Result<NodeValue> {
     let mut state = BuildState {
         stack: Vec::new(),
         root: None,
+        strict,
     };
 
     for event in events {
@@ -68,12 +77,12 @@ pub fn node_to_json(value: NodeValue) -> JsonValue {
     }
 }
 
-#[allow(clippy::too_many_lines)]
 fn apply_event(state: &mut BuildState, event: JsonStreamEvent) -> Result<()> {
     match event {
         JsonStreamEvent::StartObject => {
             state.stack.push(BuildContext::Object {
                 entries: Vec::new(),
+                index: HashMap::new(),
                 current_key: None,
                 quoted_keys: HashSet::new(),
             });
@@ -94,27 +103,7 @@ fn apply_event(state: &mut BuildState, event: JsonStreamEvent) -> Result<()> {
                 entries,
                 quoted_keys,
             });
-            if let Some(parent) = state.stack.last_mut() {
-                match parent {
-                    BuildContext::Object {
-                        entries,
-                        current_key,
-                        ..
-                    } => {
-                        let Some(key) = current_key.take() else {
-                            return Err(ToonError::message(
-                                "Object endObject event without preceding key",
-                            ));
-                        };
-                        entries.push((key, node));
-                    }
-                    BuildContext::Array { items } => {
-                        items.push(node);
-                    }
-                }
-            } else {
-                state.root = Some(node);
-            }
+            attach(state, node, "Object endObject event without preceding key")?;
         }
         JsonStreamEvent::StartArray { .. } => {
             state.stack.push(BuildContext::Array { items: Vec::new() });
@@ -126,73 +115,69 @@ fn apply_event(state: &mut BuildState, event: JsonStreamEvent) -> Result<()> {
             let BuildContext::Array { items } = context else {
                 return Err(ToonError::mismatched_end("Array", "Object"));
             };
-            let node = NodeValue::Array(items);
-            if let Some(parent) = state.stack.last_mut() {
-                match parent {
-                    BuildContext::Object {
-                        entries,
-                        current_key,
-                        ..
-                    } => {
-                        let Some(key) = current_key.take() else {
-                            return Err(ToonError::message(
-                                "Array endArray event without preceding key",
-                            ));
-                        };
-                        entries.push((key, node));
-                    }
-                    BuildContext::Array { items } => {
-                        items.push(node);
-                    }
-                }
-            } else {
-                state.root = Some(node);
-            }
+            attach(
+                state,
+                NodeValue::Array(items),
+                "Array endArray event without preceding key",
+            )?;
         }
         JsonStreamEvent::Key { key, was_quoted } => {
-            let Some(BuildContext::Object {
-                current_key,
-                quoted_keys,
-                ..
-            }) = state.stack.last_mut()
-            else {
+            let Some(BuildContext::Object { current_key, .. }) = state.stack.last_mut() else {
                 return Err(ToonError::unexpected_event(
                     "Key",
                     "outside of object context",
                 ));
             };
-            *current_key = Some(key.clone());
-            if was_quoted {
-                quoted_keys.insert(key);
-            }
+            *current_key = Some((key, was_quoted));
         }
         JsonStreamEvent::Primitive { value } => {
-            if state.stack.is_empty() {
-                state.root = Some(NodeValue::Primitive(value));
-                return Ok(());
-            }
-
-            match state.stack.last_mut() {
-                Some(BuildContext::Object {
-                    entries,
-                    current_key,
-                    ..
-                }) => {
-                    let Some(key) = current_key.take() else {
-                        return Err(ToonError::message(
-                            "Primitive event without preceding key in object",
-                        ));
-                    };
-                    entries.push((key, NodeValue::Primitive(value)));
-                }
-                Some(BuildContext::Array { items }) => {
-                    items.push(NodeValue::Primitive(value));
-                }
-                None => {}
-            }
+            attach(
+                state,
+                NodeValue::Primitive(value),
+                "Primitive event without preceding key in object",
+            )?;
         }
     }
 
+    Ok(())
+}
+
+/// Attach a finished value to the innermost open container, or make it the root.
+fn attach(state: &mut BuildState, node: NodeValue, missing_key: &str) -> Result<()> {
+    let strict = state.strict;
+    match state.stack.last_mut() {
+        None => state.root = Some(node),
+        Some(BuildContext::Array { items }) => items.push(node),
+        Some(BuildContext::Object {
+            entries,
+            index,
+            current_key,
+            quoted_keys,
+        }) => {
+            let Some((key, was_quoted)) = current_key.take() else {
+                return Err(ToonError::message(missing_key));
+            };
+            if let Some(&position) = index.get(&key) {
+                // A repeated sibling key: plain `--decode` used to write both, a JSON text with
+                // duplicate member names, while `--expand-paths safe` rejected the same document.
+                if strict {
+                    return Err(ToonError::message(format!(
+                        "Duplicate sibling key \"{key}\""
+                    )));
+                }
+                entries[position].1 = node;
+            } else {
+                index.insert(key.clone(), entries.len());
+                entries.push((key.clone(), node));
+            }
+            // Quoting belongs to the entry that holds the key; it decides path expansion.
+            if was_quoted {
+                quoted_keys.insert(key);
+            } else {
+                quoted_keys.remove(&key);
+            }
+        }
+    }
     Ok(())
 }
 
@@ -212,6 +197,64 @@ fn finalize_state(state: BuildState) -> Result<NodeValue> {
 mod tests {
     use super::*;
     use crate::StringOrNumberOrBoolOrNull;
+
+    /// The builder in strict mode, the default of every decoder.
+    fn build_node_from_events(
+        events: impl IntoIterator<Item = JsonStreamEvent>,
+    ) -> Result<NodeValue> {
+        super::build_node_from_events(events, true)
+    }
+
+    fn object_with(entries: Vec<JsonStreamEvent>) -> Vec<JsonStreamEvent> {
+        let mut events = vec![JsonStreamEvent::StartObject];
+        events.extend(entries);
+        events.push(JsonStreamEvent::EndObject);
+        events
+    }
+
+    #[test]
+    fn repeated_key_is_an_error_in_strict_mode() {
+        let events = object_with(vec![key("a"), prim_num(1.0), key("a"), prim_num(2.0)]);
+        let err = build_node_from_events(events).unwrap_err();
+        assert_eq!(err.to_string(), "Duplicate sibling key \"a\"");
+    }
+
+    #[test]
+    fn repeated_key_is_last_write_wins_in_lenient_mode() {
+        let events = object_with(vec![
+            key("a"),
+            prim_num(1.0),
+            key("b"),
+            prim_num(2.0),
+            key("a"),
+            prim_num(3.0),
+        ]);
+        let root = super::build_node_from_events(events, false).unwrap();
+        let NodeValue::Object(obj) = root else {
+            unreachable!("an object was built")
+        };
+        let keys: Vec<_> = obj.entries.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["a", "b"]);
+        assert_eq!(
+            obj.entries[0].1,
+            NodeValue::Primitive(StringOrNumberOrBoolOrNull::Number(3.0))
+        );
+    }
+
+    #[test]
+    fn quoting_follows_the_entry_that_wins() {
+        let events = object_with(vec![
+            quoted_key("a.b"),
+            prim_num(1.0),
+            key("a.b"),
+            prim_num(2.0),
+        ]);
+        let root = super::build_node_from_events(events, false).unwrap();
+        let NodeValue::Object(obj) = root else {
+            unreachable!("an object was built")
+        };
+        assert!(!obj.quoted_keys.contains("a.b"));
+    }
 
     fn prim(v: &str) -> JsonStreamEvent {
         JsonStreamEvent::Primitive {

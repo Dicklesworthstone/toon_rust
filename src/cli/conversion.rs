@@ -1,4 +1,3 @@
-use crate::cli::json_stream::json_stream_from_events;
 use crate::cli::json_stringify::json_stringify_lines;
 use crate::decode::decoders as decoder_impl;
 use crate::decode::event_builder::{build_node_from_events, node_to_json};
@@ -31,14 +30,11 @@ pub fn encode_to_toon_lines(
 /// Returns an error if decoding fails or strict validation errors occur.
 pub fn decode_to_json_chunks(input: &str, options: Option<DecodeOptions>) -> Result<Vec<String>> {
     let resolved = resolve_decode_options(options);
-
-    if resolved.expand_paths == ExpandPathsMode::Safe {
-        let value = decode_to_value(input, &resolved)?;
-        return Ok(json_stringify_lines(&value, resolved.indent));
-    }
-
-    let events = decode_events(input, resolved.indent, resolved.strict)?;
-    json_stream_from_events(events, resolved.indent)
+    // One path for both modes: the value tree is where repeated sibling keys are resolved (an
+    // error in strict mode, last write wins otherwise). Streaming the events straight to JSON
+    // wrote a repeated key twice, and a different escape style than `--expand-paths safe`.
+    let value = decode_to_value(input, &resolved)?;
+    Ok(json_stringify_lines(&value, resolved.indent))
 }
 
 fn decode_events(input: &str, indent: usize, strict: bool) -> Result<Vec<crate::JsonStreamEvent>> {
@@ -61,7 +57,7 @@ fn decode_to_value(
     options: &crate::options::ResolvedDecodeOptions,
 ) -> Result<JsonValue> {
     let events = decode_events(input, options.indent, options.strict)?;
-    let mut node = build_node_from_events(events)?;
+    let mut node = build_node_from_events(events, options.strict)?;
 
     if options.expand_paths == ExpandPathsMode::Safe {
         node = expand_paths_safe(node, options.strict)?;

@@ -68,7 +68,7 @@ pub fn try_decode_from_lines(
         }),
     )?;
 
-    let mut node = build_node_from_events(events)?;
+    let mut node = build_node_from_events(events, resolved.strict)?;
 
     if resolved.expand_paths == ExpandPathsMode::Safe {
         node = expand_paths_safe(node, resolved.strict)?;

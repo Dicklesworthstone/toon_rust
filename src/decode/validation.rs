@@ -1,7 +1,7 @@
 use crate::decode::parser::ArrayHeaderInfo;
 use crate::decode::scanner::{BlankLineInfo, Depth, ParsedLine};
 use crate::error::{Result, ToonError};
-use crate::shared::constants::{COLON, LIST_ITEM_PREFIX};
+use crate::shared::constants::{COLON, LIST_ITEM_MARKER, LIST_ITEM_PREFIX};
 use crate::shared::string_utils::find_unquoted_char;
 
 /// Assert the expected count in strict mode.
@@ -37,7 +37,7 @@ pub fn validate_no_extra_list_items(
     if strict
         && let Some(line) = next_line
         && line.depth == item_depth
-        && line.content.starts_with(LIST_ITEM_PREFIX)
+        && (line.content.starts_with(LIST_ITEM_PREFIX) || line.content == LIST_ITEM_MARKER)
     {
         return Err(ToonError::message(format!(
             "Expected {expected_count} list array items, but found more"
@@ -100,7 +100,10 @@ pub fn validate_no_blank_lines_in_range(
     Ok(())
 }
 
-const fn is_data_row(content: &str, delimiter: char) -> bool {
+/// Spec §9.3 row disambiguation: a line at row depth is a row unless its first unquoted colon
+/// precedes its first unquoted delimiter.
+#[must_use]
+pub const fn is_data_row(content: &str, delimiter: char) -> bool {
     // Find first unquoted colon and delimiter to properly handle quoted strings
     let colon_pos = find_unquoted_char(content, COLON, 0);
     let delimiter_pos = find_unquoted_char(content, delimiter, 0);

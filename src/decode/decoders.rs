@@ -7,13 +7,12 @@ use crate::decode::scanner::{
     Depth, ParsedLine, StreamingLineCursor, create_scan_state, parse_lines_sync,
 };
 use crate::decode::validation::{
-    assert_expected_count, validate_no_blank_lines_in_range, validate_no_extra_list_items,
-    validate_no_extra_tabular_rows,
+    assert_expected_count, is_data_row, validate_no_blank_lines_in_range,
+    validate_no_extra_list_items, validate_no_extra_tabular_rows,
 };
 use crate::error::{Result, ToonError};
 use crate::options::DecodeStreamOptions;
-use crate::shared::constants::{COLON, DEFAULT_DELIMITER, LIST_ITEM_MARKER, LIST_ITEM_PREFIX};
-use crate::shared::string_utils::find_closing_quote;
+use crate::shared::constants::{DEFAULT_DELIMITER, LIST_ITEM_MARKER, LIST_ITEM_PREFIX};
 
 #[derive(Debug, Clone, Copy)]
 pub struct DecoderContext {
@@ -58,6 +57,15 @@ pub fn decode_stream_sync(
     {
         cursor.advance_sync();
         decode_array_from_header_sync(&mut events, header_info, &mut cursor, 0, context)?;
+        // The root array is the whole document; a line after it used to be ignored silently.
+        if context.strict
+            && let Some(extra) = cursor.peek_sync()
+        {
+            return Err(ToonError::validation(
+                extra.line_number,
+                "Unexpected content after the document root",
+            ));
+        }
         return Ok(events);
     }
 
@@ -73,20 +81,38 @@ pub fn decode_stream_sync(
     events.push(JsonStreamEvent::StartObject);
     decode_key_value_sync(&mut events, &first.content, &mut cursor, 0, context)?;
 
-    while !cursor.at_end_sync() {
-        let line = cursor.peek_sync().cloned();
-        let Some(line) = line else {
-            break;
-        };
-        if line.depth != 0 {
-            break;
+    // Every remaining line belongs to the root object. A deeper line that no nested block
+    // consumed used to end the decode, dropping it and every later line without a word.
+    while let Some(line) = cursor.peek_sync().cloned() {
+        if line.depth != 0 && context.strict {
+            return Err(over_indented_line(&line, 0));
         }
         cursor.advance_sync();
-        decode_key_value_sync(&mut events, &line.content, &mut cursor, 0, context)?;
+        decode_key_value_sync(&mut events, &line.content, &mut cursor, line.depth, context)?;
     }
 
     events.push(JsonStreamEvent::EndObject);
     Ok(events)
+}
+
+fn over_indented_line(line: &ParsedLine, expected_depth: Depth) -> ToonError {
+    ToonError::validation(
+        line.line_number,
+        format!(
+            "Over-indented line: expected depth {expected_depth}, but found {}",
+            line.depth
+        ),
+    )
+}
+
+fn depth_jump(line: &ParsedLine, expected_depth: Depth) -> ToonError {
+    ToonError::validation(
+        line.line_number,
+        format!(
+            "Indentation depth jump: expected depth {expected_depth}, but found {}",
+            line.depth
+        ),
+    )
 }
 
 fn decode_key_value_sync(
@@ -145,25 +171,27 @@ fn decode_object_fields_sync(
 ) -> Result<()> {
     let mut computed_depth: Option<Depth> = None;
 
-    while !cursor.at_end_sync() {
-        let line = cursor.peek_sync().cloned();
-        let Some(line) = line else {
-            break;
-        };
+    while let Some(line) = cursor.peek_sync().cloned() {
         if line.depth < base_depth {
             break;
         }
 
-        if computed_depth.is_none() {
-            computed_depth = Some(line.depth);
+        // The first field fixes the depth of its siblings; it may sit one level deeper than its
+        // parent, not two.
+        if computed_depth.is_none() && options.strict && line.depth > base_depth {
+            return Err(depth_jump(&line, base_depth));
+        }
+        let fields_depth = *computed_depth.get_or_insert(line.depth);
+
+        // A line deeper than the fields that the previous field did not consume (it held a
+        // primitive) is malformed. Strict mode reports it; lenient mode keeps it as a field of
+        // this object instead of dropping it and the rest of the document.
+        if line.depth != fields_depth && options.strict {
+            return Err(over_indented_line(&line, fields_depth));
         }
 
-        if Some(line.depth) == computed_depth {
-            cursor.advance_sync();
-            decode_key_value_sync(events, &line.content, cursor, line.depth, options)?;
-        } else {
-            break;
-        }
+        cursor.advance_sync();
+        decode_key_value_sync(events, &line.content, cursor, line.depth, options)?;
     }
 
     Ok(())
@@ -189,9 +217,7 @@ fn decode_array_from_header_sync(
         return Ok(());
     }
 
-    if let Some(fields) = &header.fields
-        && !fields.is_empty()
-    {
+    if header.fields.is_some() {
         decode_tabular_array_sync(events, &header, cursor, base_depth, options)?;
         events.push(JsonStreamEvent::EndArray);
         return Ok(());
@@ -242,7 +268,10 @@ fn decode_tabular_array_sync(
     let mut start_line: Option<usize> = None;
     let mut end_line: Option<usize> = None;
 
-    while !cursor.at_end_sync() && row_count < header.length {
+    // Strict mode stops at the declared count and reports a surplus row below. Lenient mode
+    // never lets `[N]` truncate the block (spec §14.1): the surplus rows used to stay
+    // unconsumed and end the whole document.
+    while !options.strict || row_count < header.length {
         let line = cursor.peek_sync().cloned();
         let Some(line) = line else {
             break;
@@ -251,7 +280,9 @@ fn decode_tabular_array_sync(
             break;
         }
 
-        if line.depth == row_depth {
+        // Spec §9.3: at row depth, a line whose first unquoted colon precedes the first
+        // unquoted delimiter is a key-value line and ends the rows.
+        if line.depth == row_depth && is_data_row(&line.content, header.delimiter) {
             if start_line.is_none() {
                 start_line = Some(line.line_number);
             }
@@ -309,7 +340,8 @@ fn decode_list_array_sync(
     let mut start_line: Option<usize> = None;
     let mut end_line: Option<usize> = None;
 
-    while !cursor.at_end_sync() && item_count < header.length {
+    // As for tabular rows: strict mode stops at `[N]`, lenient mode takes every item.
+    while !options.strict || item_count < header.length {
         let line = cursor.peek_sync().cloned();
         let Some(line) = line else {
             break;
@@ -424,23 +456,7 @@ fn decode_list_item_sync(
             options,
         )?;
 
-        let follow_depth = base_depth + 1;
-        while !cursor.at_end_sync() {
-            let next_line = cursor.peek_sync().cloned();
-            let Some(next_line) = next_line else {
-                break;
-            };
-            if next_line.depth < follow_depth {
-                break;
-            }
-            if next_line.depth == follow_depth && !next_line.content.starts_with(LIST_ITEM_PREFIX) {
-                cursor.advance_sync();
-                decode_key_value_sync(events, &next_line.content, cursor, follow_depth, options)?;
-            } else {
-                break;
-            }
-        }
-
+        decode_list_item_fields_sync(events, cursor, base_depth + 1, options)?;
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
     }
@@ -449,23 +465,7 @@ fn decode_list_item_sync(
         events.push(JsonStreamEvent::StartObject);
         decode_key_value_sync(events, &after_hyphen, cursor, base_depth + 1, options)?;
 
-        let follow_depth = base_depth + 1;
-        while !cursor.at_end_sync() {
-            let next_line = cursor.peek_sync().cloned();
-            let Some(next_line) = next_line else {
-                break;
-            };
-            if next_line.depth < follow_depth {
-                break;
-            }
-            if next_line.depth == follow_depth && !next_line.content.starts_with(LIST_ITEM_PREFIX) {
-                cursor.advance_sync();
-                decode_key_value_sync(events, &next_line.content, cursor, follow_depth, options)?;
-            } else {
-                break;
-            }
-        }
-
+        decode_list_item_fields_sync(events, cursor, base_depth + 1, options)?;
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
     }
@@ -473,6 +473,31 @@ fn decode_list_item_sync(
     events.push(JsonStreamEvent::Primitive {
         value: parse_primitive_token(&after_hyphen)?,
     });
+    Ok(())
+}
+
+/// The remaining fields of a list-item object, one level below the hyphen line.
+fn decode_list_item_fields_sync(
+    events: &mut Vec<JsonStreamEvent>,
+    cursor: &mut StreamingLineCursor,
+    fields_depth: Depth,
+    options: DecoderContext,
+) -> Result<()> {
+    while let Some(line) = cursor.peek_sync().cloned() {
+        if line.depth < fields_depth
+            || line.content.starts_with(LIST_ITEM_PREFIX)
+            || line.content == LIST_ITEM_MARKER
+        {
+            break;
+        }
+        // As in `decode_object_fields_sync`: a deeper line nobody consumed is an error in
+        // strict mode and a field of this object in lenient mode, never silently dropped.
+        if line.depth > fields_depth && options.strict {
+            return Err(over_indented_line(&line, fields_depth));
+        }
+        cursor.advance_sync();
+        decode_key_value_sync(events, &line.content, cursor, line.depth, options)?;
+    }
     Ok(())
 }
 
@@ -500,15 +525,10 @@ fn yield_object_from_fields(
     events.push(JsonStreamEvent::EndObject);
 }
 
+/// A key-value line has a colon outside quotes, at the root exactly as in a list item (the root
+/// used to count any colon, so `a"b: c` meant an object there and a string in a list).
 fn is_key_value_line_sync(line: &ParsedLine) -> bool {
-    let content = line.content.as_str();
-    if content.starts_with('"') {
-        if let Some(closing) = find_closing_quote(content, 0) {
-            return content[closing + 1..].contains(COLON);
-        }
-        return false;
-    }
-    content.contains(COLON)
+    is_key_value_content(&line.content)
 }
 
 #[cfg(test)]
