@@ -237,7 +237,9 @@ Additional normalization edge cases (from tests):
 
 - `null` -> `"null"`
 - `boolean` -> `"true" | "false"`
-- `number` -> `String(value)`
+- `number` -> canonical decimal (spec §2): the shortest digits that read back as the same
+  double (an exact tie goes to the even digit, as in `String(value)`), but never an exponent
+  (`1e21` -> `1000000000000000000000`), `-0` -> `0`
 - `string` -> `encodeStringLiteral(value)`
 
 `encodeStringLiteral`:
@@ -299,7 +301,7 @@ Given array `value`:
 3. **Array of arrays** (all arrays, each is primitive-only):
    - Use list format:
      - header `key[3]:`
-     - each row as list item `- a,b,c`
+     - each row as list item `- [3]: a,b,c`
 
 4. **Array of objects**:
    - If tabular eligible:

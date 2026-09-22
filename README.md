@@ -102,9 +102,10 @@ users[3]{id,name,active}:
   2,Bob,false
   3,Carol,true
 
-# Key folding - nested single-key objects collapse
-config.database.host: localhost
-config.database.port: 5432
+# Key folding (--key-folding safe) - chains of single-key objects collapse
+config.database:
+  host: localhost
+  port: 5432
 ```
 
 ### Token Savings in Practice
@@ -138,17 +139,33 @@ echo 'users[2]{id,name}:
   1,Alice
   2,Bob' | toon --decode
 
-# Output:
-# {"users":[{"id":1,"name":"Alice"},{"id":2,"name":"Bob"}]}
+# Output (indented by --indent, default 2; --indent 0 prints compact JSON):
+# {
+#   "users": [
+#     {
+#       "id": 1,
+#       "name": "Alice"
+#     },
+#     {
+#       "id": 2,
+#       "name": "Bob"
+#     }
+#   ]
+# }
 
 # File-based with auto-detection
 toon data.json -o data.toon    # .json -> encode
 toon data.toon -o data.json    # .toon -> decode
 
-# Show token savings
-toon data.json --stats
-# Token estimates: ~1250 (JSON) -> ~520 (TOON)
-# Saved ~730 tokens (-58.4%)
+# Show token estimates (stderr, after an empty line; either direction)
+echo '{"users":[{"id":1,"name":"Alice","role":"admin"},{"id":2,"name":"Bob","role":"user"},{"id":3,"name":"Carol","role":"user"}]}' | toon --encode --stats
+# users[3]{id,name,role}:
+#   1,Alice,admin
+#   2,Bob,user
+#   3,Carol,user
+#
+# Token estimates: ~31 (JSON) → ~14 (TOON)
+# Saved ~17 tokens (-54.8%)
 ```
 
 ### Library Usage
@@ -281,16 +298,12 @@ cargo build --release
    cat data.toon | ./target/release/toon --decode
    ```
 
-Note: CLI wiring is in progress; library APIs are production-ready for encode/decode.
-
 ---
 
 ## Command Reference
 
-Target CLI (matches the reference tool):
-
 ```bash
-toon [options] [input]
+toon [OPTIONS] [INPUT]
 ```
 
 Auto-detection:
@@ -299,16 +312,20 @@ Auto-detection:
 - stdin defaults to encode unless `--decode` is provided
 
 Common flags:
-- `-o, --output <file>`
+- `-o, --output <file>` (`-` or omitted: stdout)
 - `-e, --encode`
 - `-d, --decode`
-- `--delimiter <,|\\t|\\|>`
-- `--indent <n>`
+- `--delimiter <d>`: `,` or `comma`, `\t`, `tab` or a TAB character, `|` or `pipe`
+- `--indent <n>`: 0 to 16; encode needs at least 1; on decode it is both the TOON input
+  indentation and the JSON output indentation (0 = compact JSON)
 - `--no-strict`
 - `--key-folding <off|safe>`
 - `--flatten-depth <n>`
 - `--expand-paths <off|safe>`
-- `--stats` (encode only)
+- `--stats` (token estimates, either direction)
+
+Exit codes: 0 success, 1 conversion or I/O error (including a failed write of the output),
+2 usage error.
 
 ---
 
@@ -365,7 +382,8 @@ One of TOON's most powerful features is automatic tabular array formatting. The 
 
 1. Check if array is non-empty and all elements are objects
 2. Extract field names from the first object
-3. Verify all objects have identical keys in the same order
+3. Verify all objects have the same set of keys (the order may differ; cells follow the first
+   object's order)
 4. Verify all values are primitives (no nested structures)
 5. If all checks pass, emit as tabular with header
 
@@ -397,9 +415,11 @@ Algorithm:
 ```
 
 Safety checks prevent folding when:
-- A sibling key matches the folded path
-- The path contains non-identifier characters
-- Folding would exceed `--flatten-depth`
+- A sibling key (in a list-item object: any key of that object) equals the folded path
+- A segment within the depth budget is not an identifier (`[A-Za-z_][A-Za-z0-9_]*`)
+
+`--flatten-depth N` folds at most N segments and writes the rest of the chain nested:
+`{"a":{"b":{"c":1}}}` with `--flatten-depth 2` is `a.b:` followed by `  c: 1`.
 
 ### Decoding Algorithm
 
