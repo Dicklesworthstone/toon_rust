@@ -8,7 +8,7 @@ use crate::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMo
 use args::{Args, ExpandPathsArg, KeyFoldingArg, Mode};
 use clap::Parser;
 use std::fs::File;
-use std::io::{self, BufWriter, Read, Write};
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 /// Runs the CLI entrypoint.
@@ -26,7 +26,24 @@ pub fn run() -> Result<()> {
     }
 }
 
+/// Write one line to stderr.
+///
+/// A failing stderr (closed, or a full device) must not turn a finished conversion into a crash:
+/// the diagnostic is dropped and the exit status still says what happened.
+pub fn report(line: &str) {
+    let mut handle = io::stderr().lock();
+    let _ = writeln!(handle, "{line}");
+}
+
 fn run_encode(args: &Args) -> Result<()> {
+    // TOON structure is indentation: with 0 spaces per level every depth collapses onto one
+    // column and the output no longer denotes the input.
+    if args.indent == 0 {
+        return Err(ToonError::message(
+            "Indentation size must be at least 1 when encoding TOON",
+        ));
+    }
+
     // Read input (JSON)
     let input = read_input(args)?;
 
@@ -43,40 +60,20 @@ fn run_encode(args: &Args) -> Result<()> {
     };
 
     // Encode
-    let toon_lines = conversion::encode_to_toon_lines(&input, Some(options))?;
+    let toon_output = conversion::encode_to_toon_lines(&input, Some(options))?.join("\n");
+    write_output(args, &toon_output)?;
 
-    // Output
     if args.stats {
-        let toon_output = toon_lines.join("\n");
-        write_output(args, toon_output.as_bytes())?;
-
-        // Calculate token estimates (simple heuristic: ~4 chars per token)
-        let json_tokens = estimate_tokens(&input);
-        let toon_tokens = estimate_tokens(&toon_output);
-        let diff = json_tokens.saturating_sub(toon_tokens);
-        #[allow(clippy::cast_precision_loss)]
-        let percent = if json_tokens > 0 {
-            (diff as f64 / json_tokens as f64) * 100.0
-        } else {
-            0.0
-        };
-
-        // Print stats to stderr (so stdout can be piped)
-        eprintln!();
-        eprintln!("Token estimates: ~{json_tokens} (JSON) → ~{toon_tokens} (TOON)");
-        if diff > 0 {
-            eprintln!("Saved ~{diff} tokens (-{percent:.1}%)");
-        }
-    } else {
-        // Streaming output
-        write_lines(args, &toon_lines)?;
+        report_stats(&input, &toon_output);
     }
 
     // Success message to stderr if writing to file
-    if let Some(ref output_path) = args.output {
-        let input_label = format_input_label(args);
-        let output_label = output_path.display();
-        eprintln!("Encoded `{input_label}` → `{output_label}`");
+    if let Some(output_path) = args.output_file() {
+        report(&format!(
+            "Encoded `{}` → `{}`",
+            format_input_label(args),
+            output_path.display()
+        ));
     }
 
     Ok(())
@@ -96,31 +93,49 @@ fn run_decode(args: &Args) -> Result<()> {
         }),
     };
 
-    // Decode to JSON chunks
-    let json_chunks = conversion::decode_to_json_chunks(&input, Some(options))?;
+    // Decode to JSON text
+    let json_output = conversion::decode_to_json_chunks(&input, Some(options))
+        .map_err(|err| ToonError::message(format!("Failed to decode TOON: {err}")))?
+        .concat();
+    write_output(args, &json_output)?;
 
-    // Write output
-    write_chunks(args, &json_chunks)?;
+    if args.stats {
+        report_stats(&json_output, &input);
+    }
 
     // Success message to stderr if writing to file
-    if let Some(ref output_path) = args.output {
-        let input_label = format_input_label(args);
-        let output_label = output_path.display();
-        eprintln!("Decoded `{input_label}` → `{output_label}`");
+    if let Some(output_path) = args.output_file() {
+        report(&format!(
+            "Decoded `{}` → `{}`",
+            format_input_label(args),
+            output_path.display()
+        ));
     }
 
     Ok(())
 }
 
 fn read_input(args: &Args) -> Result<String> {
-    if args.is_stdin() {
-        read_stdin()
+    let text = if args.is_stdin() {
+        read_stdin()?
     } else {
         let path = args
             .input
             .as_ref()
             .ok_or_else(|| ToonError::message("No input file specified"))?;
-        read_file(path)
+        read_file(path)?
+    };
+    Ok(strip_bom(text))
+}
+
+/// Drop a leading UTF-8 byte order mark. It is an encoding signature, never data (RFC 8259 §8.1
+/// lets a JSON reader ignore it); without this, a BOM became part of the first TOON key and made
+/// BOM-prefixed JSON unreadable.
+fn strip_bom(text: String) -> String {
+    if text.starts_with('\u{feff}') {
+        text['\u{feff}'.len_utf8()..].to_string()
+    } else {
+        text
     }
 }
 
@@ -136,85 +151,23 @@ fn read_file(path: &Path) -> Result<String> {
     std::fs::read_to_string(path).map_err(|e| ToonError::file_read(path.to_path_buf(), e))
 }
 
-fn write_output(args: &Args, data: &[u8]) -> Result<()> {
-    if let Some(ref path) = args.output {
-        let mut file = File::create(path).map_err(|e| ToonError::file_create(path.clone(), e))?;
-        file.write_all(data)
-            .map_err(|e| ToonError::file_write(path.clone(), e))?;
-        // Add trailing newline for file output
-        file.write_all(b"\n")
-            .map_err(|e| ToonError::file_write(path.clone(), e))?;
+/// Write the document and its final newline, then flush, so that every write error (a full
+/// device, a closed pipe) is reported instead of being lost when a buffer is dropped.
+fn write_output(args: &Args, data: &str) -> Result<()> {
+    if let Some(path) = args.output_file() {
+        let mut file =
+            File::create(path).map_err(|e| ToonError::file_create(path.to_path_buf(), e))?;
+        file.write_all(data.as_bytes())
+            .and_then(|()| file.write_all(b"\n"))
+            .and_then(|()| file.flush())
+            .map_err(|e| ToonError::file_write(path.to_path_buf(), e))?;
     } else {
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
-        handle.write_all(data).map_err(ToonError::stdout_write)?;
-        handle.write_all(b"\n").map_err(ToonError::stdout_write)?;
-    }
-    Ok(())
-}
-
-fn write_lines(args: &Args, lines: &[String]) -> Result<()> {
-    if let Some(ref path) = args.output {
-        let file = File::create(path).map_err(|e| ToonError::file_create(path.clone(), e))?;
-        let mut writer = BufWriter::new(file);
-
-        for (i, line) in lines.iter().enumerate() {
-            if i > 0 {
-                writer
-                    .write_all(b"\n")
-                    .map_err(|e| ToonError::file_write(path.clone(), e))?;
-            }
-            writer
-                .write_all(line.as_bytes())
-                .map_err(|e| ToonError::file_write(path.clone(), e))?;
-        }
-        // Trailing newline
-        writer
-            .write_all(b"\n")
-            .map_err(|e| ToonError::file_write(path.clone(), e))?;
-    } else {
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
-
-        for (i, line) in lines.iter().enumerate() {
-            if i > 0 {
-                handle.write_all(b"\n").map_err(ToonError::stdout_write)?;
-            }
-            handle
-                .write_all(line.as_bytes())
-                .map_err(ToonError::stdout_write)?;
-        }
-        // Trailing newline
-        handle.write_all(b"\n").map_err(ToonError::stdout_write)?;
-    }
-    Ok(())
-}
-
-fn write_chunks(args: &Args, chunks: &[String]) -> Result<()> {
-    if let Some(ref path) = args.output {
-        let file = File::create(path).map_err(|e| ToonError::file_create(path.clone(), e))?;
-        let mut writer = BufWriter::new(file);
-
-        for chunk in chunks {
-            writer
-                .write_all(chunk.as_bytes())
-                .map_err(|e| ToonError::file_write(path.clone(), e))?;
-        }
-        // Trailing newline
-        writer
-            .write_all(b"\n")
-            .map_err(|e| ToonError::file_write(path.clone(), e))?;
-    } else {
-        let stdout = io::stdout();
-        let mut handle = stdout.lock();
-
-        for chunk in chunks {
-            handle
-                .write_all(chunk.as_bytes())
-                .map_err(ToonError::stdout_write)?;
-        }
-        // Trailing newline
-        handle.write_all(b"\n").map_err(ToonError::stdout_write)?;
+        let mut handle = io::stdout().lock();
+        handle
+            .write_all(data.as_bytes())
+            .and_then(|()| handle.write_all(b"\n"))
+            .and_then(|()| handle.flush())
+            .map_err(ToonError::stdout_write)?;
     }
     Ok(())
 }
@@ -229,11 +182,83 @@ fn format_input_label(args: &Args) -> String {
     }
 }
 
+/// Print the token estimates of the JSON and TOON forms of one document (to stderr, so stdout can
+/// be piped), in either direction, whichever form is smaller.
+fn report_stats(json_text: &str, toon_text: &str) {
+    let json_tokens = estimate_tokens(json_text);
+    let toon_tokens = estimate_tokens(toon_text);
+
+    report("");
+    report(&format!(
+        "Token estimates: ~{json_tokens} (JSON) → ~{toon_tokens} (TOON)"
+    ));
+    report(&savings_line(json_tokens, toon_tokens));
+}
+
+fn savings_line(json_tokens: usize, toon_tokens: usize) -> String {
+    let noun = |n: usize| if n == 1 { "token" } else { "tokens" };
+    match toon_tokens.cmp(&json_tokens) {
+        std::cmp::Ordering::Less => {
+            let diff = json_tokens - toon_tokens;
+            format!(
+                "Saved ~{diff} {} (-{}%)",
+                noun(diff),
+                percent_of(diff, json_tokens)
+            )
+        }
+        std::cmp::Ordering::Greater => {
+            let diff = toon_tokens - json_tokens;
+            format!(
+                "TOON is larger by ~{diff} {} (+{}%)",
+                noun(diff),
+                percent_of(diff, json_tokens)
+            )
+        }
+        std::cmp::Ordering::Equal => "No token difference (0.0%)".to_string(),
+    }
+}
+
+/// `part / whole` as a percentage with one decimal, rounded half up on the exact quotient (a
+/// binary64 quotient rounded twice put exact ties such as 28.75% on the wrong side).
+fn percent_of(part: usize, whole: usize) -> String {
+    let (part, whole) = (part as u128, whole.max(1) as u128);
+    let tenths = (part * 2000 + whole) / (whole * 2);
+    format!("{}.{}", tenths / 10, tenths % 10)
+}
+
 /// Simple token estimation heuristic (roughly 4 chars per token for English/code).
-/// This matches the behavior of tokenx used in the legacy CLI.
 fn estimate_tokens(text: &str) -> usize {
     // Simple heuristic: count non-whitespace chars / 4, with minimum of word count
     let char_estimate = text.chars().filter(|c| !c.is_whitespace()).count() / 4;
     let word_estimate = text.split_whitespace().count();
     char_estimate.max(word_estimate).max(1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn percent_is_rounded_on_the_exact_quotient() {
+        assert_eq!(percent_of(23, 80), "28.8");
+        assert_eq!(percent_of(49, 80), "61.3");
+        assert_eq!(percent_of(1, 3), "33.3");
+        assert_eq!(percent_of(2, 3), "66.7");
+        assert_eq!(percent_of(0, 5), "0.0");
+        assert_eq!(percent_of(5, 5), "100.0");
+    }
+
+    #[test]
+    fn savings_line_covers_all_three_outcomes() {
+        assert_eq!(savings_line(10, 9), "Saved ~1 token (-10.0%)");
+        assert_eq!(savings_line(10, 5), "Saved ~5 tokens (-50.0%)");
+        assert_eq!(savings_line(4, 5), "TOON is larger by ~1 token (+25.0%)");
+        assert_eq!(savings_line(7, 7), "No token difference (0.0%)");
+    }
+
+    #[test]
+    fn bom_is_stripped_only_at_the_start() {
+        assert_eq!(strip_bom("\u{feff}{}".to_string()), "{}");
+        assert_eq!(strip_bom("a\u{feff}".to_string()), "a\u{feff}");
+    }
 }

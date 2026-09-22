@@ -29,8 +29,8 @@ pub enum ToonError {
         source: std::io::Error,
     },
 
-    /// JSON serialization/deserialization error
-    #[error("JSON error: {message}")]
+    /// JSON serialization/deserialization error (the message names the operation)
+    #[error("{message}")]
     Json { message: String },
 
     /// Generic message (for backward compatibility)
@@ -234,6 +234,6 @@ impl From<std::io::Error> for ToonError {
 
 impl From<serde_json::Error> for ToonError {
     fn from(err: serde_json::Error) -> Self {
-        Self::json(err.to_string())
+        Self::json(format!("JSON error: {err}"))
     }
 }

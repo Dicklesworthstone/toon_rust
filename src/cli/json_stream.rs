@@ -211,8 +211,9 @@ fn stringify_primitive(value: &crate::JsonPrimitive) -> String {
     match value {
         crate::StringOrNumberOrBoolOrNull::Null => "null".to_string(),
         crate::StringOrNumberOrBoolOrNull::Bool(value) => value.to_string(),
-        crate::StringOrNumberOrBoolOrNull::Number(value) => serde_json::Number::from_f64(*value)
-            .map_or_else(|| "null".to_string(), |num| num.to_string()),
+        crate::StringOrNumberOrBoolOrNull::Number(value) => {
+            crate::encode::primitives::format_json_number(*value)
+        }
         crate::StringOrNumberOrBoolOrNull::String(value) => {
             serde_json::to_string(value).unwrap_or_else(|_| "\"\"".to_string())
         }

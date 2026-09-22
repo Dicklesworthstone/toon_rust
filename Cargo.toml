@@ -39,7 +39,10 @@ clap_complete = "4.6.5"
 
 # Serialization
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = { version = "1.0.150", features = ["preserve_order"] }
+# float_roundtrip: JSON number text is read as the nearest binary64 (the default fast path drops
+# digits beyond a 64-bit significand and rounds twice, so `0.3333333333333333333333` became
+# 0.33333333333333337 and the largest finite double was rejected as out of range).
+serde_json = { version = "1.0.150", features = ["preserve_order", "float_roundtrip"] }
 
 # Error handling
 anyhow = "1.0.102"

@@ -1,5 +1,3 @@
-use std::fmt::Write;
-
 use crate::JsonValue;
 
 /// Stream JSON stringification chunks for a `JsonValue`.
@@ -125,11 +123,7 @@ fn stringify_primitive_to_buf(value: &crate::JsonPrimitive, buf: &mut String) {
         crate::StringOrNumberOrBoolOrNull::Bool(true) => buf.push_str("true"),
         crate::StringOrNumberOrBoolOrNull::Bool(false) => buf.push_str("false"),
         crate::StringOrNumberOrBoolOrNull::Number(n) => {
-            if let Some(num) = serde_json::Number::from_f64(*n) {
-                buf.push_str(&num.to_string());
-            } else {
-                buf.push_str("null");
-            }
+            buf.push_str(&crate::encode::primitives::format_json_number(*n));
         }
         crate::StringOrNumberOrBoolOrNull::String(s) => {
             push_json_string(buf, s);
@@ -145,24 +139,16 @@ fn push_indent(buf: &mut String, count: usize) {
     }
 }
 
-/// Push a JSON-escaped string (with quotes) directly to buffer
+/// Push a JSON-escaped string (with quotes) directly to buffer.
+///
+/// The escaping is `serde_json`'s, the same as the streaming writer's (and JavaScript's
+/// `JSON.stringify`): `\b \f \n \r \t \" \\`, `\u00XX` for the other C0 controls, everything
+/// else as is. `--expand-paths safe` used to spell the same string differently.
 fn push_json_string(buf: &mut String, s: &str) {
-    buf.push('"');
-    for c in s.chars() {
-        match c {
-            '"' => buf.push_str("\\\""),
-            '\\' => buf.push_str("\\\\"),
-            '\n' => buf.push_str("\\n"),
-            '\r' => buf.push_str("\\r"),
-            '\t' => buf.push_str("\\t"),
-            c if c.is_control() => {
-                // Use \uXXXX format for control characters
-                let _ = write!(buf, "\\u{:04x}", c as u32);
-            }
-            c => buf.push(c),
-        }
+    match serde_json::to_string(s) {
+        Ok(text) => buf.push_str(&text),
+        Err(_) => buf.push_str("\"\""),
     }
-    buf.push('"');
 }
 
 #[cfg(test)]
@@ -205,12 +191,36 @@ mod tests {
 
     #[test]
     fn primitive_number_integer_like() {
-        assert_eq!(stringify(&n(42.0), 0), "42.0");
+        assert_eq!(stringify(&n(42.0), 0), "42");
     }
 
     #[test]
     fn primitive_number_zero() {
-        assert_eq!(stringify(&n(0.0), 0), "0.0");
+        assert_eq!(stringify(&n(0.0), 0), "0");
+        assert_eq!(stringify(&n(-0.0), 0), "0");
+    }
+
+    #[test]
+    fn primitive_number_follows_javascript_number_text() {
+        assert_eq!(stringify(&n(1.5), 0), "1.5");
+        assert_eq!(stringify(&n(-2.25), 0), "-2.25");
+        assert_eq!(
+            stringify(&n(18_446_744_073_709_551_615.0), 0),
+            "18446744073709552000"
+        );
+        assert_eq!(stringify(&n(1e21), 0), "1e+21");
+        assert_eq!(stringify(&n(1.5e21), 0), "1.5e+21");
+        assert_eq!(stringify(&n(0.000_001), 0), "0.000001");
+        assert_eq!(stringify(&n(1e-7), 0), "1e-7");
+        assert_eq!(stringify(&n(-1.25e-7), 0), "-1.25e-7");
+        assert_eq!(stringify(&n(f64::MAX), 0), "1.7976931348623157e+308");
+        assert_eq!(stringify(&n(5e-324), 0), "5e-324");
+        // An exact tie between two shortest candidates takes the even digit.
+        // 2101031963024178.25, built exactly.
+        assert_eq!(
+            stringify(&n(8_404_127_852_096_713.0 / 4.0), 0),
+            "2101031963024178.2"
+        );
     }
 
     #[test]
@@ -250,6 +260,15 @@ mod tests {
     }
 
     #[test]
+    fn primitive_string_escapes_match_the_streaming_writer() {
+        // `\b` and `\f` use their short escapes; DEL and C1 controls are not escaped.
+        assert_eq!(
+            stringify(&s("\u{0008}\u{000c}\u{007f}\u{0085}"), 0),
+            "\"\\b\\f\u{007f}\u{0085}\""
+        );
+    }
+
+    #[test]
     fn empty_array_is_compact() {
         let v = JsonValue::Array(vec![]);
         assert_eq!(stringify(&v, 0), "[]");
@@ -266,25 +285,25 @@ mod tests {
     #[test]
     fn array_no_indent() {
         let v = JsonValue::Array(vec![n(1.0), n(2.0), n(3.0)]);
-        assert_eq!(stringify(&v, 0), "[1.0,2.0,3.0]");
+        assert_eq!(stringify(&v, 0), "[1,2,3]");
     }
 
     #[test]
     fn array_with_indent() {
         let v = JsonValue::Array(vec![n(1.0), n(2.0)]);
-        assert_eq!(stringify(&v, 2), "[\n  1.0,\n  2.0\n]");
+        assert_eq!(stringify(&v, 2), "[\n  1,\n  2\n]");
     }
 
     #[test]
     fn object_no_indent() {
         let v = JsonValue::Object(vec![("a".to_string(), n(1.0)), ("b".to_string(), b(true))]);
-        assert_eq!(stringify(&v, 0), "{\"a\":1.0,\"b\":true}");
+        assert_eq!(stringify(&v, 0), "{\"a\":1,\"b\":true}");
     }
 
     #[test]
     fn object_with_indent() {
         let v = JsonValue::Object(vec![("a".to_string(), n(1.0))]);
-        assert_eq!(stringify(&v, 2), "{\n  \"a\": 1.0\n}");
+        assert_eq!(stringify(&v, 2), "{\n  \"a\": 1\n}");
     }
 
     #[test]

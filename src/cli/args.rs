@@ -17,7 +17,7 @@ pub struct Args {
     #[arg(value_name = "INPUT")]
     pub input: Option<PathBuf>,
 
-    /// Output file path (stdout if omitted)
+    /// Output file path (omit or use "-" to write to stdout)
     #[arg(short, long, value_name = "FILE")]
     pub output: Option<PathBuf>,
 
@@ -29,11 +29,12 @@ pub struct Args {
     #[arg(short, long, conflicts_with = "encode")]
     pub decode: bool,
 
-    /// Delimiter for arrays: comma (,), tab (\t), or pipe (|)
+    /// Delimiter for arrays: comma (`,` or `comma`), tab (`\t` or `tab`), or pipe (`|` or `pipe`)
     #[arg(long, default_value = ",", value_parser = parse_delimiter)]
     pub delimiter: char,
 
-    /// Indentation size (spaces)
+    /// Indentation size in spaces, 0 to 16 (encode: TOON output, at least 1; decode: TOON input
+    /// and JSON output, where 0 prints compact JSON)
     #[arg(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..=16))]
     pub indent: u8,
 
@@ -53,7 +54,7 @@ pub struct Args {
     #[arg(long, value_enum, default_value = "off")]
     pub expand_paths: ExpandPathsArg,
 
-    /// Show token statistics (encode only)
+    /// Show token estimates for the JSON and TOON forms (stderr)
     #[arg(long)]
     pub stats: bool,
 }
@@ -93,11 +94,13 @@ impl Args {
             return Mode::Decode;
         }
 
-        // Auto-detect based on file extension
+        // Auto-detect based on the file name's suffix. `Path::extension` reports none for a
+        // dotfile, so a file named just `.toon` would have been read as JSON.
         if let Some(ref path) = self.input
-            && let Some(ext) = path.extension()
+            && let Some(name) = path.file_name()
+            && let Some((_, ext)) = name.to_string_lossy().rsplit_once('.')
         {
-            let ext = ext.to_string_lossy().to_lowercase();
+            let ext = ext.to_lowercase();
             if ext == "json" {
                 return Mode::Encode;
             }
@@ -108,6 +111,14 @@ impl Args {
 
         // Default to encode
         Mode::Encode
+    }
+
+    /// The output file, or `None` for stdout (no `-o`, or `-o -`).
+    #[must_use]
+    pub fn output_file(&self) -> Option<&std::path::Path> {
+        self.output
+            .as_deref()
+            .filter(|path| path.as_os_str() != "-")
     }
 
     /// Returns true if reading from stdin.

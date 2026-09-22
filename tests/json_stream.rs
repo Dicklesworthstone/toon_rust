@@ -24,8 +24,11 @@ fn json_stringify_lines_matches_serde_for_compact() {
     let chunks = json_stringify_lines(&value, 0);
     let actual = chunks.concat();
 
-    let expected = serde_json::to_string(&serde_value(&value)).unwrap();
-    assert_eq!(actual, expected);
+    // Same value as serde's text; an integer-valued number is written `1` (JSON.stringify), not
+    // serde's `1.0`.
+    assert_eq!(actual, r#"{"a":1,"b":[true,"x"]}"#);
+    let reparsed: serde_json::Value = serde_json::from_str(&actual).unwrap();
+    assert_eq!(JsonValue::from(reparsed), value);
 }
 
 #[test]
