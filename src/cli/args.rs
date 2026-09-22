@@ -3,7 +3,9 @@ use std::path::PathBuf;
 
 /// TOON CLI — Convert between JSON and TOON formats
 #[derive(Parser, Debug)]
-#[command(name = "toon", version, about, long_about = None)]
+// `bin_name`: usage lines name the program `toon` like the version line does, whatever path or
+// name the binary was started under.
+#[command(name = "toon", bin_name = "toon", version, about, long_about = None)]
 #[allow(clippy::struct_excessive_bools)]
 #[command(after_help = "EXAMPLES:
     toon input.json                  # Encode JSON to TOON (stdout)
@@ -35,7 +37,9 @@ pub struct Args {
 
     /// Indentation size in spaces, 0 to 16 (encode: TOON output, at least 1; decode: TOON input
     /// and JSON output, where 0 prints compact JSON)
-    #[arg(long, default_value = "2", value_parser = clap::value_parser!(u8).range(0..=16))]
+    // A negative value is a value (`--indent -1` is the range error), not an unknown flag.
+    #[arg(long, default_value = "2", allow_negative_numbers = true,
+          value_parser = clap::value_parser!(u8).range(0..=16))]
     pub indent: u8,
 
     /// Disable strict mode for decoding (allows lenient parsing)
@@ -47,7 +51,7 @@ pub struct Args {
     pub key_folding: KeyFoldingArg,
 
     /// Maximum folded segment count when key folding is enabled
-    #[arg(long, value_name = "N")]
+    #[arg(long, value_name = "N", allow_negative_numbers = true)]
     pub flatten_depth: Option<usize>,
 
     /// Path expansion mode: off or safe (decode only)
