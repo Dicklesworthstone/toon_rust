@@ -50,7 +50,12 @@ pub fn parse_array_header_line(
             .find(OPEN_BRACKET)
             .map(|idx| key_end + idx)
     } else {
-        content.find(OPEN_BRACKET)
+        // An unquoted key cannot contain a colon, so a bracket after the first colon belongs to
+        // the value (e.g. `note: "see [2] ref: x"`), never to an array header.
+        let first_colon = content.find(COLON);
+        content
+            .find(OPEN_BRACKET)
+            .filter(|&idx| first_colon.is_none_or(|colon| idx < colon))
     };
 
     let Some(bracket_start) = bracket_start else {

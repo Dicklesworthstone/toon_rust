@@ -533,6 +533,52 @@ fn key_with_dots_literal() {
 }
 
 // ============================================================================
+// BRACKETS INSIDE QUOTED VALUES (not array headers)
+// ============================================================================
+
+/// A quoted value holding `[N]` and a later colon must stay a string. It used to be read as
+/// an array header (`Expected 2 inline array items, but got 1`); the Semantic Scholar corpus
+/// hits it with citation markers such as `"… [6] J. D. Achenbach …: …"`.
+#[test]
+fn bracket_and_colon_inside_quoted_value_roundtrip() {
+    for value in [
+        "x [2] y: z",
+        "[2]: 1,2,3",
+        "see [6] J. D. Achenbach, \u{201c}Scattering: waves\u{201d}",
+        "a[1]{b}: c",
+    ] {
+        for json in [
+            serde_json::json!({ "note": value }),
+            serde_json::json!({ "outer": { "note": value } }),
+            serde_json::json!({ "items": [{ "note": value, "extra": ["p", "q"] }] }),
+            serde_json::json!([{ "note": value }, "seven"]),
+        ] {
+            let toon = encode(json.clone(), None);
+            let decoded: serde_json::Value = try_decode(&toon, None)
+                .unwrap_or_else(|e| panic!("decode of {toon:?} failed: {e}"))
+                .into();
+            assert_eq!(json, decoded, "round trip of {toon:?}");
+        }
+    }
+}
+
+#[test]
+fn unquoted_key_with_bracketed_quoted_value_is_key_value() {
+    let decoded: serde_json::Value = try_decode("a: \"x [2] y: z\"", None).unwrap().into();
+    assert_eq!(decoded, serde_json::json!({ "a": "x [2] y: z" }));
+    // A real header keeps working, with and without fields.
+    let decoded: serde_json::Value = try_decode("a[2]: 1,2", None).unwrap().into();
+    assert_eq!(decoded, serde_json::json!({ "a": [1.0, 2.0] }));
+    let decoded: serde_json::Value = try_decode("a[1]{b,c}:\n  1,\"x [2] y: z\"", None)
+        .unwrap()
+        .into();
+    assert_eq!(
+        decoded,
+        serde_json::json!({ "a": [{ "b": 1.0, "c": "x [2] y: z" }] })
+    );
+}
+
+// ============================================================================
 // PROPERTY-BASED TESTS
 // ============================================================================
 
