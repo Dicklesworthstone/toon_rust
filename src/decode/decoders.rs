@@ -18,6 +18,33 @@ use crate::shared::constants::{DEFAULT_DELIMITER, LIST_ITEM_MARKER, LIST_ITEM_PR
 pub struct DecoderContext {
     pub indent: usize,
     pub strict: bool,
+    /// Number of objects and arrays open around the value being decoded.
+    pub nesting: usize,
+}
+
+/// The deepest nesting of objects and arrays a document may have.
+///
+/// It is the JSON reader's limit (`serde_json` refuses a 128th nested container), so every
+/// decoded value can be read back as JSON. Deeper TOON used to overflow the stack and abort.
+pub const MAX_NESTING_DEPTH: usize = 127;
+
+impl DecoderContext {
+    /// The context inside one more object or array.
+    fn inside_container(self, line_number: usize) -> Result<Self> {
+        let nesting = self.nesting + 1;
+        if nesting > MAX_NESTING_DEPTH {
+            return Err(ToonError::validation(
+                line_number,
+                format!("Nesting depth exceeds {MAX_NESTING_DEPTH} levels"),
+            ));
+        }
+        Ok(Self { nesting, ..self })
+    }
+}
+
+/// The line number of the line the cursor consumed last (the line that opens a container).
+fn current_line_number(cursor: &StreamingLineCursor) -> usize {
+    cursor.current().map_or(0, |line| line.line_number)
 }
 
 /// Decode TOON input into a stream of JSON events.
@@ -37,6 +64,7 @@ pub fn decode_stream_sync(
     let context = DecoderContext {
         indent: options.indent.unwrap_or(2),
         strict: options.strict.unwrap_or(true),
+        nesting: 0,
     };
 
     let mut scan_state = create_scan_state();
@@ -78,6 +106,7 @@ pub fn decode_stream_sync(
         return Ok(events);
     }
 
+    let context = context.inside_container(first.line_number)?;
     events.push(JsonStreamEvent::StartObject);
     decode_key_value_sync(&mut events, &first.content, &mut cursor, 0, context)?;
 
@@ -142,12 +171,13 @@ fn decode_key_value_sync(
     });
 
     if rest.is_empty() {
+        let inner = options.inside_container(current_line_number(cursor))?;
         let next_line = cursor.peek_sync();
         if let Some(next) = next_line
             && next.depth > base_depth
         {
             events.push(JsonStreamEvent::StartObject);
-            decode_object_fields_sync(events, cursor, base_depth + 1, options)?;
+            decode_object_fields_sync(events, cursor, base_depth + 1, inner)?;
             events.push(JsonStreamEvent::EndObject);
             return Ok(());
         }
@@ -206,6 +236,7 @@ fn decode_array_from_header_sync(
 ) -> Result<()> {
     let header = header_info.header;
     let inline_values = header_info.inline_values;
+    let options = options.inside_container(current_line_number(cursor))?;
 
     events.push(JsonStreamEvent::StartArray {
         length: header.length,
@@ -263,6 +294,8 @@ fn decode_tabular_array_sync(
     base_depth: Depth,
     options: DecoderContext,
 ) -> Result<()> {
+    // Every row is an object one level inside the array.
+    options.inside_container(current_line_number(cursor))?;
     let row_depth = base_depth + 1;
     let mut row_count = 0usize;
     let mut start_line: Option<usize> = None;
@@ -407,8 +440,11 @@ fn decode_list_item_sync(
     let line = cursor
         .next_sync()
         .ok_or_else(|| ToonError::message("Expected list item"))?;
+    // The context inside an object item; checked only where an item opens an object.
+    let object_item = || options.inside_container(line.line_number);
 
     if line.content == LIST_ITEM_MARKER {
+        object_item()?;
         events.push(JsonStreamEvent::StartObject);
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
@@ -423,6 +459,7 @@ fn decode_list_item_sync(
     };
 
     if after_hyphen.trim().is_empty() {
+        object_item()?;
         events.push(JsonStreamEvent::StartObject);
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
@@ -440,6 +477,7 @@ fn decode_list_item_sync(
         && header_info.header.fields.is_some()
     {
         let header = header_info.header;
+        let inner = object_item()?;
         events.push(JsonStreamEvent::StartObject);
         events.push(JsonStreamEvent::Key {
             key: header.key.clone().unwrap_or_default(),
@@ -453,19 +491,20 @@ fn decode_list_item_sync(
             },
             cursor,
             base_depth + 1,
-            options,
+            inner,
         )?;
 
-        decode_list_item_fields_sync(events, cursor, base_depth + 1, options)?;
+        decode_list_item_fields_sync(events, cursor, base_depth + 1, inner)?;
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
     }
 
     if is_key_value_content(&after_hyphen) {
+        let inner = object_item()?;
         events.push(JsonStreamEvent::StartObject);
-        decode_key_value_sync(events, &after_hyphen, cursor, base_depth + 1, options)?;
+        decode_key_value_sync(events, &after_hyphen, cursor, base_depth + 1, inner)?;
 
-        decode_list_item_fields_sync(events, cursor, base_depth + 1, options)?;
+        decode_list_item_fields_sync(events, cursor, base_depth + 1, inner)?;
         events.push(JsonStreamEvent::EndObject);
         return Ok(());
     }

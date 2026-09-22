@@ -702,6 +702,33 @@ fn field_name_with_a_closing_brace_round_trips() {
     assert_eq!(decode_ok(&toon), json);
 }
 
+/// TOON nests at most as deep as the JSON reader accepts (127 containers, the root included), so
+/// every decoded value can be read back as JSON; deeper input used to overflow the stack.
+#[test]
+fn nesting_limit_matches_the_json_reader() {
+    let chain = |objects: usize| {
+        let mut doc = String::new();
+        for i in 0..objects {
+            doc.push_str(&"  ".repeat(i));
+            doc.push_str("k:\n");
+        }
+        doc.push_str(&"  ".repeat(objects));
+        doc.push_str("v: 1");
+        doc
+    };
+    // The root object plus 126 nested objects: 127 containers.
+    assert!(try_decode(&chain(126), None).is_ok());
+    assert_eq!(
+        decode_strict_err(&chain(127)),
+        "Validation error at line 127: Nesting depth exceeds 127 levels"
+    );
+    let arrays = |n: usize| format!("{}{}", "[".repeat(n), "]".repeat(n));
+    assert!(serde_json::from_str::<serde_json::Value>(&arrays(127)).is_ok());
+    assert!(serde_json::from_str::<serde_json::Value>(&arrays(128)).is_err());
+    // Far deeper input is an error, not a crash.
+    assert!(try_decode(&chain(1_000), None).is_err());
+}
+
 #[test]
 fn crlf_bare_dash_item_and_indented_quoted_key() {
     assert_eq!(
