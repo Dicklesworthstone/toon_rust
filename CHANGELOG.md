@@ -6,6 +6,40 @@ Entries are organized by tagged release, with capabilities grouped thematically 
 
 ---
 
+## [v0.2.5](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.2.5) -- 2026-10-03
+
+Correctness and release maintenance since v0.2.4.
+
+### Fixes
+
+- Quoted brackets remain scalar values rather than being interpreted as arrays.
+- Strict decoding rejects surplus rows and content instead of silently dropping
+  them; duplicate keys and list-item key folding follow the strict/lenient rules.
+- Bound decoding depth to the JSON reader's 127-container limit. Empty tabular
+  arrays at that limit remain valid; only actual rows add an object level.
+- Read JSON numbers as the nearest binary64 value, including long decimal text
+  and the largest finite double, and preserve escaping during round trips.
+- Report output write failures consistently and accept negative option values.
+
+### Installation and dependencies
+
+- Verify archive SHA256 checksums before extraction, verify minisign signatures
+  when available (or required with `--require-minisign`), support pinned versions
+  and isolated destinations, and retain download scratch and previous binaries.
+- Publish signed archives for the existing five release targets.
+- Update the coupled WASM family to wasm-bindgen 0.2.129 / js-sys 0.3.106 and
+  insta to 1.49.0. Keep the existing exact asupersync 0.5.0 pin and MSRV 1.88.
+- Package the actual LICENSE with its OpenAI/Anthropic Rider rather than declaring
+  the distribution to be unmodified MIT.
+
+### Validation limits
+
+- The optional conformance harness skips error fixtures; its passing results do
+  not establish complete specification conformance. Default regression tests
+  cover strict-validation errors separately.
+
+---
+
 ## [v0.2.4](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.2.4) -- 2026-08-24 (released)
 
 Maintenance release. Everything on `main` since [v0.2.3](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.2.3) (2026-04-24): 34 commits, entirely dependency currency, CI hygiene, and small lint/const-correctness fixes. No behaviour changes to the TOON encoder/decoder and no API breaks, so this is a patch bump.

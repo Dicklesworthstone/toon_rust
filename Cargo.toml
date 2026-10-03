@@ -1,10 +1,10 @@
 [package]
 name = "tru"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 rust-version = "1.88"
 description = "TOON reference implementation in Rust (JSON <-> TOON)"
-license = "MIT"
+license-file = "LICENSE"
 readme = "README.md"
 homepage = "https://github.com/Dicklesworthstone/toon_rust"
 repository = "https://github.com/Dicklesworthstone/toon_rust"

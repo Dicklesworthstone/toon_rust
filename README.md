@@ -29,13 +29,24 @@ Spec-first Rust port of [TOON](https://github.com/toon-format/toon) with determi
 curl -fsSL "https://raw.githubusercontent.com/Dicklesworthstone/toon_rust/main/install.sh?$(date +%s)" | bash
 ```
 
+The installer verifies each archive's SHA256 checksum. Install `minisign` to
+verify release authenticity, or pass `--require-minisign` to require it:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/toon_rust/main/install.sh \
+  | bash -s -- --version 0.2.5 --require-minisign
+```
+
+Use `--dest DIR` for an isolated installation. Download scratch and any previous
+binary are retained so a failed download or verification can be inspected.
+
 **Or build from source:**
 
 ```bash
 cargo install --git https://github.com/Dicklesworthstone/toon_rust
 ```
 
-<p><em>Works on Linux, macOS, and Windows. Production-ready with 100% spec conformance.</em></p>
+<p><em>Works on Linux, macOS, and Windows.</em></p>
 </div>
 
 ---

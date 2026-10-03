@@ -294,8 +294,6 @@ fn decode_tabular_array_sync(
     base_depth: Depth,
     options: DecoderContext,
 ) -> Result<()> {
-    // Every row is an object one level inside the array.
-    options.inside_container(current_line_number(cursor))?;
     let row_depth = base_depth + 1;
     let mut row_count = 0usize;
     let mut start_line: Option<usize> = None;
@@ -316,6 +314,9 @@ fn decode_tabular_array_sync(
         // Spec §9.3: at row depth, a line whose first unquoted colon precedes the first
         // unquoted delimiter is a key-value line and ends the rows.
         if line.depth == row_depth && is_data_row(&line.content, header.delimiter) {
+            // Count the row object only when a row exists. Empty tabular arrays may
+            // reach the array nesting limit without adding an object beneath it.
+            options.inside_container(line.line_number)?;
             if start_line.is_none() {
                 start_line = Some(line.line_number);
             }

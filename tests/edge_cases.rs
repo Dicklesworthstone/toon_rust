@@ -10,10 +10,14 @@
 //! - Delimiter edge cases
 //! - Key folding conflict scenarios
 
+use std::fmt::Write as _;
+
 use insta::assert_snapshot;
 use proptest::prelude::*;
-use toon::options::{DecodeOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode};
-use toon::{JsonValue, decode, encode, try_decode};
+use toon::options::{
+    DecodeOptions, DecodeStreamOptions, EncodeOptions, ExpandPathsMode, KeyFoldingMode,
+};
+use toon::{JsonValue, decode, encode, try_decode, try_decode_stream_sync};
 
 /// Helper: decode with defaults and return the error message string.
 fn decode_err(input: &str) -> String {
@@ -727,6 +731,101 @@ fn nesting_limit_matches_the_json_reader() {
     assert!(serde_json::from_str::<serde_json::Value>(&arrays(128)).is_err());
     // Far deeper input is an error, not a crash.
     assert!(try_decode(&chain(1_000), None).is_err());
+}
+
+#[test]
+fn empty_tabular_array_at_json_nesting_limit() {
+    let mut doc = String::new();
+    for depth in 0..125 {
+        doc.push_str(&"  ".repeat(depth));
+        doc.push_str("k:\n");
+    }
+    doc.push_str(&"  ".repeat(125));
+    doc.push_str("items[0]{x}:");
+    let json = format!(
+        "{}{{\"items\":[]}}{}",
+        "{\"k\":".repeat(125),
+        "}".repeat(125)
+    );
+    let expected: serde_json::Value = serde_json::from_str(&json).unwrap();
+    for strict in [true, false] {
+        let options = Some(DecodeOptions {
+            indent: None,
+            strict: Some(strict),
+            expand_paths: None,
+        });
+        let decoded: serde_json::Value = try_decode(&doc, options).unwrap().into();
+        assert_eq!(decoded, expected);
+        assert!(
+            try_decode_stream_sync(
+                doc.lines().map(str::to_owned),
+                Some(DecodeStreamOptions {
+                    indent: None,
+                    strict: Some(strict),
+                }),
+            )
+            .is_ok()
+        );
+    }
+}
+
+#[test]
+fn tabular_array_nesting_limit_counts_only_present_rows() {
+    for nested_objects in [124, 125] {
+        for strict in [true, false] {
+            for declared_rows in [0, 1] {
+                if strict && declared_rows == 0 {
+                    continue;
+                }
+                let mut doc = String::new();
+                for depth in 0..nested_objects {
+                    doc.push_str(&"  ".repeat(depth));
+                    doc.push_str("k:\n");
+                }
+                doc.push_str(&"  ".repeat(nested_objects));
+                writeln!(doc, "items[{declared_rows}]{{x}}:").unwrap();
+                doc.push_str(&"  ".repeat(nested_objects + 1));
+                doc.push('1');
+                let options = Some(DecodeOptions {
+                    indent: None,
+                    strict: Some(strict),
+                    expand_paths: None,
+                });
+                let result = try_decode(&doc, options);
+                let stream_result = try_decode_stream_sync(
+                    doc.lines().map(str::to_owned),
+                    Some(DecodeStreamOptions {
+                        indent: None,
+                        strict: Some(strict),
+                    }),
+                );
+                if nested_objects == 125 {
+                    assert!(
+                        result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("Nesting depth exceeds 127")
+                    );
+                    assert!(
+                        stream_result
+                            .unwrap_err()
+                            .to_string()
+                            .contains("Nesting depth exceeds 127")
+                    );
+                } else {
+                    assert!(stream_result.is_ok());
+                    let json = format!(
+                        "{}{{\"items\":[{{\"x\":1.0}}]}}{}",
+                        "{\"k\":".repeat(nested_objects),
+                        "}".repeat(nested_objects)
+                    );
+                    let expected: serde_json::Value = serde_json::from_str(&json).unwrap();
+                    let decoded: serde_json::Value = result.unwrap().into();
+                    assert_eq!(decoded, expected);
+                }
+            }
+        }
+    }
 }
 
 #[test]
