@@ -29,6 +29,8 @@ Correctness and release maintenance since v0.2.4.
 - Publish signed archives for the existing five release targets.
 - Update the coupled WASM family to wasm-bindgen 0.2.129 / js-sys 0.3.106 and
   insta to 1.49.0. Keep the existing exact asupersync 0.5.0 pin and MSRV 1.88.
+- Replace yanked transitive chacha20 0.10.1 with 0.10.2, which fixes an SSE4.1
+  instruction being used by the SSE2 RNG/legacy backend.
 - Package the actual LICENSE with its OpenAI/Anthropic Rider rather than declaring
   the distribution to be unmodified MIT.
 

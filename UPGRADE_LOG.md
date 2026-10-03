@@ -64,6 +64,10 @@ Cargo also deduplicated tempfile 3.27.0's getrandom edge from 0.4.3 to the exist
 0.3.4. The unchanged published tempfile manifest permits `>=0.3.0, <0.5`; no
 tempfile version, checksum or source changed.
 
+The packaging check exposed yanked chacha20 0.10.1. Its official changelog
+identifies an SSE4.1 intrinsic in the SSE2 RNG/legacy backend; update only that
+transitive package to 0.10.2 (MSRV 1.85). The final gate includes this patch.
+
 Remote formatting and all-target Clippy gates passed, as did all 277 default
 tests and the WASM/conformance supplement (282 tests, with the conformance
 harness's internal error-fixture skips disclosed in CHANGELOG). Independent
