@@ -80,13 +80,9 @@ We only use **Cargo** in this project, NEVER any other package manager.
 
 | Crate | Purpose |
 |-------|---------|
-| `clap` | CLI argument parsing with derive macros |
-| `clap_complete` | Shell completion generation |
-| `serde` + `serde_json` | JSON serialization/deserialization (preserve_order enabled) |
-| `anyhow` | Application-level error context |
-| `thiserror` | Ergonomic error type derivation |
-| `tracing` + `tracing-subscriber` | Structured logging and diagnostics |
-| `chrono` | Date/time handling |
+| *(none)* | Core `lib` feature (TOON encoder/decoder over `JsonValue`) has zero third-party runtime dependencies |
+| `serde_json` | JSON interoperability and conversions (optional, `serde` / `cli` / `wasm` features; `preserve_order` + `float_roundtrip`) |
+| `clap` | CLI argument parsing with derive macros (optional, `cli` feature) |
 | `asupersync` | Structured async runtime (optional, `async-stream` feature) |
 | `wasm-bindgen` + `js-sys` | WebAssembly bindings (optional, `wasm` feature) |
 
@@ -94,6 +90,7 @@ We only use **Cargo** in this project, NEVER any other package manager.
 
 | Crate | Purpose |
 |-------|---------|
+| `serde` | Fixture deserialization in integration tests |
 | `tempfile` | Temporary files for test isolation |
 | `assert_cmd` + `predicates` | CLI integration testing |
 | `criterion` | Performance benchmarks |
@@ -103,11 +100,11 @@ We only use **Cargo** in this project, NEVER any other package manager.
 
 ### Release Profile
 
-The release build optimizes for binary size:
+The release build optimizes for runtime performance:
 
 ```toml
 [profile.release]
-opt-level = "z"     # Optimize for size
+opt-level = 3       # Optimize for speed
 lto = true          # Link-time optimization
 codegen-units = 1   # Single codegen unit for better optimization
 panic = "abort"     # Smaller binary, no unwinding overhead
@@ -316,10 +313,13 @@ toon_rust/
 
 ```toml
 [features]
-default = []
-conformance = []                                                    # Enable conformance test infrastructure
-async-stream = ["dep:asupersync"]                                   # Async streaming via asupersync runtime
-wasm = ["dep:wasm-bindgen", "dep:console_error_panic_hook", "dep:js-sys"]  # WebAssembly bindings
+default = ["lib", "serde", "cli"]
+lib = []                                                                     # Zero-dependency TOON encoder/decoder over JsonValue
+serde = ["lib", "dep:serde_json"]                                            # serde_json::Value conversions and json_to_toon/toon_to_json
+cli = ["lib", "serde", "dep:clap"]                                           # CLI binary (toon) and toon::cli module
+conformance = ["serde", "cli"]                                               # Enable conformance test infrastructure
+async-stream = ["lib", "dep:asupersync"]                                     # Async streaming via asupersync runtime
+wasm = ["lib", "serde", "dep:wasm-bindgen", "dep:console_error_panic_hook", "dep:js-sys"]  # WebAssembly bindings
 ```
 
 ### Core Types Quick Reference
@@ -371,7 +371,7 @@ wasm = ["dep:wasm-bindgen", "dep:console_error_panic_hook", "dep:js-sys"]  # Web
 - **Key folding is opt-in** — `--key-folding safe` enables dotted-path compression; off by default for safety
 - **`#![forbid(unsafe_code)]`** — enforced at crate level via `[lints.rust]`
 - **Clippy pedantic + nursery** — both enabled as warnings for maximum code quality
-- **Binary size optimized** — release profile uses `opt-level = "z"`, LTO, abort on panic, symbol stripping
+- **Performance optimized** — release profile uses `opt-level = 3`, LTO, abort on panic, symbol stripping
 
 ---
 

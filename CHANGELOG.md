@@ -6,6 +6,32 @@ Entries are organized by tagged release, with capabilities grouped thematically 
 
 ---
 
+## [v0.3.0](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.3.0) -- 2026-11-20 **(released)**
+
+Feature split for zero-dependency library embedding, restored Rust 1.88 MSRV compatibility, performance-optimized release builds (`opt-level = 3`), and comprehensive dependency and security maintenance since [v0.2.5](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.2.5).
+
+### Library / CLI Feature Split
+
+- Split crate features into `lib` (zero third-party runtime dependencies over `JsonValue`, `JsonPrimitive`, `JsonStreamEvent`, `EncodeOptions`, `DecodeOptions`, and `ToonError`), `serde` (optional `serde_json::Value` conversions and `json_to_toon` / `toon_to_json`), and `cli` (optional `clap` dependency, `toon::cli` module, and `toon` binary).
+- `default = ["lib", "serde", "cli"]` preserves default CLI installation (`cargo install tru`) and default library compatibility while letting minimal library consumers opt in via `default-features = false, features = ["lib"]` (or `features = ["serde"]` without `clap`).
+- Added a pure-stdlib ECMA-262 shortest round-trip float formatter with exact round-half-to-even tie-breaking for `no-default-features` / `lib` builds, verified bit-for-bit against `serde_json` across edge cases, constructed exact binary64 decimal midpoints, and 16,384 deterministic float bit patterns.
+- Derived `Default` on `EncodeOptions` and `DecodeOptions` (matching documented library examples).
+- Kept all specification fixtures under `tests/fixtures/spec/` intact and unchanged.
+
+### MSRV 1.88 Compatibility & Dependency Cleanup
+
+- Removed the unused `vergen-gix` 10 build dependency (`build.rs` now uses pure `std` only), eliminating ~108 transitive `gix` build crates and restoring true Rust 1.88.0 MSRV reachability for crates.io consumers.
+- Excluded local dev configuration (`.cargo/`, `rust-toolchain.toml`, and `gh_og_share_image.png`) from published crate tarballs so unpacked crates respect the caller's toolchain.
+- Dropped unused runtime dependencies (`chrono`, `anyhow`, `clap_complete`, `tracing`, `tracing-subscriber`), replaced `thiserror` with direct `Display` + `std::error::Error` implementations on `ToonError`, and moved `serde` to `[dev-dependencies]`.
+- Updated dependencies to latest Rust 1.88-compatible versions: `clap` 4.6.9, `serde_json` 1.0.154, `asupersync` `=0.6.2`, `wasm-bindgen` 0.2.130 / `js-sys` 0.3.107 / `wasm-bindgen-futures` 0.4.80, `walkdir` 2.5.1, `rand` 0.10.4, `tempfile` 3.27.0, `insta` 1.49.0, `proptest` 1.12.0, plus security/soundness transitive refreshes (`ctutils` 0.4.8 for `RUSTSEC-2026-0385`, `rustix` 1.1.6 for `RUSTSEC-2026-0486`, `tokio` 1.54.1 for `RUSTSEC-2026-0386`). `cargo audit -D warnings` reports 0 vulnerabilities and 0 warnings.
+
+### Performance
+
+- Switched `[profile.release]` from `opt-level = "z"` to `opt-level = 3` (keeping `lto = true`, `codegen-units = 1`, `panic = "abort"`, `strip = true`).
+- Same-host A/B benchmarks against the previous `opt-level = "z"` build showed improvements across all Criterion benchmarks (`encode` 2.5x–3.3x faster, `decode` 1.6x–3.3x faster, `roundtrip` 1.6x–2.3x faster) and end-to-end 5,000-row CLI median speedups of 1.26x on encode and 1.75x on decode with zero regressions.
+
+---
+
 ## [v0.2.5](https://github.com/Dicklesworthstone/toon_rust/releases/tag/v0.2.5) -- 2026-10-03
 
 Correctness and release maintenance since v0.2.4.

@@ -275,8 +275,16 @@ mod tests {
         ]);
         for strict in [true, false] {
             let root = super::build_node_from_events(events.clone(), strict).unwrap();
-            let json: serde_json::Value = node_to_json(root).into();
-            assert_eq!(json, serde_json::json!({ "a": { "x": 1.0, "y": 2.0 } }));
+            assert_eq!(
+                node_to_json(root),
+                JsonValue::Object(vec![(
+                    "a".to_string(),
+                    JsonValue::Object(vec![
+                        ("x".to_string(), JsonValue::from(1.0)),
+                        ("y".to_string(), JsonValue::from(2.0)),
+                    ]),
+                )])
+            );
         }
     }
 

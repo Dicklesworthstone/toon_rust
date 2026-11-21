@@ -6,7 +6,7 @@ use crate::shared::constants::DEFAULT_DELIMITER;
 pub type EncodeReplacer =
     Arc<dyn Fn(&str, &JsonValue, &[PathSegment]) -> Option<JsonValue> + Send + Sync>;
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct EncodeOptions {
     pub indent: Option<usize>,
     pub delimiter: Option<char>,
@@ -21,7 +21,7 @@ pub enum KeyFoldingMode {
     Safe,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DecodeOptions {
     pub indent: Option<usize>,
     pub strict: Option<bool>,
@@ -64,13 +64,7 @@ pub enum PathSegment {
 
 #[must_use]
 pub fn resolve_encode_options(options: Option<EncodeOptions>) -> ResolvedEncodeOptions {
-    let options = options.unwrap_or(EncodeOptions {
-        indent: None,
-        delimiter: None,
-        key_folding: None,
-        flatten_depth: None,
-        replacer: None,
-    });
+    let options = options.unwrap_or_default();
 
     ResolvedEncodeOptions {
         indent: options.indent.unwrap_or(2),
@@ -83,11 +77,7 @@ pub fn resolve_encode_options(options: Option<EncodeOptions>) -> ResolvedEncodeO
 
 #[must_use]
 pub fn resolve_decode_options(options: Option<DecodeOptions>) -> ResolvedDecodeOptions {
-    let options = options.unwrap_or(DecodeOptions {
-        indent: None,
-        strict: None,
-        expand_paths: None,
-    });
+    let options = options.unwrap_or_default();
 
     ResolvedDecodeOptions {
         indent: options.indent.unwrap_or(2),

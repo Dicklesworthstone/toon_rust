@@ -73,3 +73,30 @@ tests and the WASM/conformance supplement (282 tests, with the conformance
 harness's internal error-fixture skips disclosed in CHANGELOG). Independent
 source/release review found no ship blockers. Detailed receipts and dependency
 inventory are retained in the release-wave status/evidence directory.
+
+
+## v0.3.0 dependency modernization, feature split, and MSRV restoration (2026-11-20)
+
+### Removed dependencies
+- **`vergen-gix` 10.0.x (build-dependency):** Removed completely. `build.rs` already emitted git metadata using pure `std::process::Command` + env fallback, and nothing in the crate read `VERGEN_BUILD_*` / `VERGEN_CARGO_*` / `VERGEN_RUSTC_*`. Removing `vergen-gix` restored true Rust 1.88.0 MSRV compatibility (fixing the 1.95+/1.96+ transitive build-dep regression), eliminated ~108 transitive `gix` crates, and resolved 9 unsound RustSec warnings (`RUSTSEC-2026-0306` in `faster-hex`, `RUSTSEC-2026-0574`..`RUSTSEC-2026-0582` in `heapless`).
+- **`chrono` 0.4.45:** Unused anywhere in the crate; removing it resolved `RUSTSEC-2026-0543` (unmaintained).
+- **`anyhow`, `clap_complete`, `tracing`, `tracing-subscriber`:** Unused anywhere in the crate; removed.
+- **`thiserror`:** Replaced derive macro on `ToonError` with direct `std::fmt::Display` and `std::error::Error` implementations (unit-tested for exact message and `source()` parity).
+- **`serde`:** Moved from `[dependencies]` to `[dev-dependencies]` (only used by test fixture deserializers).
+
+### Feature split
+- Split crate features into `lib` (zero third-party runtime dependencies over `JsonValue`), `serde` (optional `serde_json` interop), and `cli` (optional `clap` + `toon` binary), with `default = ["lib", "serde", "cli"]` preserving full CLI and default library compatibility.
+- Added pure-stdlib ECMA-262 shortest round-trip float formatter with exact round-half-to-even tie-breaking for the zero-dependency `lib` build, verified bit-for-bit against `serde_json` across 16,384 deterministic bit patterns and 512 constructed exact binary64 decimal midpoints.
+
+### Direct & transitive updates (all verified MSRV <= 1.88.0)
+- `clap`: `4.6.7` -> `4.6.9` (manifest floor `4.6.0` -> `4.6.9`)
+- `serde_json`: locked `1.0.154` (manifest floor aligned `1.0.150` -> `1.0.154`)
+- `asupersync`: exact pin preserved at `=0.6.2`
+- Coupled WASM family: `wasm-bindgen` `0.2.129` -> `0.2.130`, `js-sys` / `web-sys` `0.3.106` -> `0.3.107`, `wasm-bindgen-futures` `0.4.79` -> `0.4.80`, `console_error_panic_hook` `0.1.7`
+- Dev dependencies: `serde` `1.0.229`, `tempfile` `3.27.0`, `walkdir` `2.5.0` -> `2.5.1`, `insta` `1.49.0`, `proptest` `1.12.0`, `rand` `0.10.3` -> `0.10.4`
+- Security & soundness transitive refreshes: `ctutils` `0.4.2` -> `0.4.8` (resolves `RUSTSEC-2026-0385`), `rustix` `1.1.4` -> `1.1.6` (resolves `RUSTSEC-2026-0486`), `tokio` `1.53.2` -> `1.54.1` (resolves `RUSTSEC-2026-0386`), plus Rust 1.88-compatible transitive lock refreshes (holding `bincode-next` at `3.1.1` for Rust 1.88 compatibility).
+
+### Verification
+- `cargo audit -D warnings`: 0 vulnerabilities, 0 warnings across 259 locked crates.
+- Unpacked `.crate` package built and tested from outside the repository on exact `rustc 1.88.0` across `--no-default-features`, `--features lib`, `--features serde`, and default features.
+- Full test and Clippy (`-D warnings`) matrix passed across `--no-default-features`, `--features lib`, `--features serde`, default, `--features conformance`, `--features wasm`, and `--features async-stream`.

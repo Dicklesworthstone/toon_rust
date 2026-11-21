@@ -34,7 +34,7 @@ verify release authenticity, or pass `--require-minisign` to require it:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Dicklesworthstone/toon_rust/main/install.sh \
-  | bash -s -- --version 0.2.5 --require-minisign
+  | bash -s -- --version 0.3.0 --require-minisign
 ```
 
 Use `--dest DIR` for an isolated installation. Download scratch and any previous
@@ -180,6 +180,20 @@ echo '{"users":[{"id":1,"name":"Alice","role":"admin"},{"id":2,"name":"Bob","rol
 ```
 
 ### Library Usage
+
+For a zero-dependency library build over `toon::JsonValue` (no `clap`, no `serde_json`), disable default features:
+
+```toml
+[dependencies]
+toon = { package = "tru", version = "0.3.0", default-features = false, features = ["lib"] }
+```
+
+To also enable `serde_json::Value` conversions and `json_to_toon` / `toon_to_json` without pulling in the CLI (`clap`), enable `serde`:
+
+```toml
+[dependencies]
+toon = { package = "tru", version = "0.3.0", default-features = false, features = ["serde"] }
+```
 
 ```rust
 use toon::{encode, decode};
@@ -560,9 +574,8 @@ Common errors and fixes:
 
 ## Limitations
 
-- Release binaries are not published yet (coming soon - see Installation section)
-- Async streaming decode (`decode_stream`) is sync-only for now; async wrapper planned
-- No WebAssembly build yet (planned for browser/edge deployment)
+- Async streaming decode (`decode_stream`) yields line-by-line for simple objects and buffers arrays
+- WebAssembly bindings require building with `--features wasm` for `wasm32-unknown-unknown`
 
 ---
 

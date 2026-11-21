@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "cli")]
 pub mod cli;
 pub mod decode;
 pub mod encode;
@@ -26,6 +27,7 @@ pub use options::{
 ///
 /// # Errors
 /// Returns an error if the JSON input is invalid.
+#[cfg(feature = "serde")]
 pub fn json_to_toon(json: &str) -> crate::error::Result<String> {
     let value: serde_json::Value =
         serde_json::from_str(json).map_err(|e| crate::error::ToonError::json_parse(&e))?;
@@ -38,6 +40,7 @@ pub fn json_to_toon(json: &str) -> crate::error::Result<String> {
 ///
 /// # Errors
 /// Returns an error if the TOON input is invalid.
+#[cfg(feature = "serde")]
 pub fn toon_to_json(toon: &str) -> crate::error::Result<String> {
     let value = try_decode(toon, None)?;
     let value = serde_json::Value::from(value);
@@ -136,6 +139,7 @@ impl From<JsonObject> for JsonValue {
     }
 }
 
+#[cfg(feature = "serde")]
 impl From<serde_json::Value> for JsonValue {
     fn from(value: serde_json::Value) -> Self {
         match value {
@@ -166,6 +170,7 @@ impl From<serde_json::Value> for JsonValue {
     }
 }
 
+#[cfg(feature = "serde")]
 impl From<JsonValue> for serde_json::Value {
     fn from(value: JsonValue) -> Self {
         match value {
@@ -186,5 +191,66 @@ impl From<JsonValue> for serde_json::Value {
                 Self::Object(map)
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::options::{ExpandPathsMode, KeyFoldingMode};
+
+    #[test]
+    fn minimal_value_model_encode_decode_roundtrip() {
+        let value = JsonValue::Object(vec![
+            ("name".to_string(), JsonValue::from("Alice")),
+            ("active".to_string(), JsonValue::from(true)),
+            ("count".to_string(), JsonValue::from(42_i64)),
+            (
+                "users".to_string(),
+                JsonValue::Array(vec![
+                    JsonValue::Object(vec![
+                        ("id".to_string(), JsonValue::from(1_i64)),
+                        ("role".to_string(), JsonValue::from("admin")),
+                    ]),
+                    JsonValue::Object(vec![
+                        ("id".to_string(), JsonValue::from(2_i64)),
+                        ("role".to_string(), JsonValue::from("member")),
+                    ]),
+                ]),
+            ),
+            (
+                "nested".to_string(),
+                JsonValue::Object(vec![(
+                    "leaf".to_string(),
+                    JsonValue::Primitive(JsonPrimitive::Null),
+                )]),
+            ),
+        ]);
+
+        let encoded = encode(value.clone(), None);
+        assert_eq!(
+            encoded,
+            "name: Alice\nactive: true\ncount: 42\nusers[2]{id,role}:\n  1,admin\n  2,member\nnested:\n  leaf: null"
+        );
+        let decoded = try_decode(&encoded, None).unwrap();
+        assert_eq!(decoded, value);
+
+        let folded = encode(
+            value.clone(),
+            Some(EncodeOptions {
+                key_folding: Some(KeyFoldingMode::Safe),
+                ..Default::default()
+            }),
+        );
+        assert!(folded.contains("nested.leaf: null"));
+        let expanded = try_decode(
+            &folded,
+            Some(DecodeOptions {
+                expand_paths: Some(ExpandPathsMode::Safe),
+                ..Default::default()
+            }),
+        )
+        .unwrap();
+        assert_eq!(expanded, value);
     }
 }

@@ -1,41 +1,69 @@
+use std::fmt;
 use std::path::PathBuf;
-use thiserror::Error;
 
 /// Comprehensive error types for TOON encoding and decoding operations.
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub enum ToonError {
     /// Parse error with line number context
-    #[error("Line {line}: {message}")]
     Parse { line: usize, message: String },
 
     /// Validation error (strict mode violations)
-    #[error("Validation error at line {line}: {message}")]
     Validation { line: usize, message: String },
 
     /// Event stream processing error
-    #[error("Event stream error: {message}")]
     EventStream { message: String },
 
     /// Path expansion conflict or error
-    #[error("Path expansion error for '{path}': {message}")]
     PathExpansion { path: String, message: String },
 
     /// I/O error with operation context
-    #[error("{operation}{}: {source}", path.as_ref().map(|p| format!(" '{}'", p.display())).unwrap_or_default())]
     Io {
         operation: String,
         path: Option<PathBuf>,
-        #[source]
         source: std::io::Error,
     },
 
     /// JSON serialization/deserialization error (the message names the operation)
-    #[error("{message}")]
     Json { message: String },
 
     /// Generic message (for backward compatibility)
-    #[error("{message}")]
     Message { message: String },
+}
+
+impl fmt::Display for ToonError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Parse { line, message } => write!(f, "Line {line}: {message}"),
+            Self::Validation { line, message } => {
+                write!(f, "Validation error at line {line}: {message}")
+            }
+            Self::EventStream { message } => write!(f, "Event stream error: {message}"),
+            Self::PathExpansion { path, message } => {
+                write!(f, "Path expansion error for '{path}': {message}")
+            }
+            Self::Io {
+                operation,
+                path,
+                source,
+            } => {
+                if let Some(p) = path {
+                    write!(f, "{operation} '{}': {source}", p.display())
+                } else {
+                    write!(f, "{operation}: {source}")
+                }
+            }
+            Self::Json { message } | Self::Message { message } => f.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for ToonError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Io { source, .. } => Some(source),
+            _ => None,
+        }
+    }
 }
 
 pub type Result<T> = std::result::Result<T, ToonError>;
@@ -214,12 +242,14 @@ impl ToonError {
     }
 
     /// Create a JSON parse error.
+    #[cfg(feature = "serde")]
     #[must_use]
     pub fn json_parse(err: &serde_json::Error) -> Self {
         Self::json(format!("Failed to parse JSON: {err}"))
     }
 
     /// Create a JSON stringify error.
+    #[cfg(feature = "serde")]
     #[must_use]
     pub fn json_stringify(err: &serde_json::Error) -> Self {
         Self::json(format!("Failed to stringify JSON: {err}"))
@@ -232,8 +262,51 @@ impl From<std::io::Error> for ToonError {
     }
 }
 
+#[cfg(feature = "serde")]
 impl From<serde_json::Error> for ToonError {
     fn from(err: serde_json::Error) -> Self {
         Self::json(format!("JSON error: {err}"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error as _;
+
+    #[test]
+    fn display_and_source_match_expected_formats() {
+        assert_eq!(ToonError::parse(3, "bad").to_string(), "Line 3: bad");
+        assert_eq!(
+            ToonError::validation(7, "wrong indent").to_string(),
+            "Validation error at line 7: wrong indent"
+        );
+        assert_eq!(
+            ToonError::event_stream("eof").to_string(),
+            "Event stream error: eof"
+        );
+        assert_eq!(
+            ToonError::path_expansion("a.b", "conflict").to_string(),
+            "Path expansion error for 'a.b': conflict"
+        );
+        let io_with_path = ToonError::file_read(
+            PathBuf::from("data.toon"),
+            std::io::Error::new(std::io::ErrorKind::NotFound, "missing"),
+        );
+        assert_eq!(
+            io_with_path.to_string(),
+            "Failed to read file 'data.toon': missing"
+        );
+        assert!(io_with_path.source().is_some());
+
+        let io_without_path = ToonError::stdin_read(std::io::Error::other("broken"));
+        assert_eq!(io_without_path.to_string(), "Failed to read stdin: broken");
+        assert!(io_without_path.source().is_some());
+
+        let json_err = ToonError::json("Failed to parse JSON: bad");
+        assert_eq!(json_err.to_string(), "Failed to parse JSON: bad");
+        assert!(json_err.source().is_none());
+
+        assert_eq!(ToonError::message("boom").to_string(), "boom");
     }
 }
